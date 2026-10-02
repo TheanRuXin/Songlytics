@@ -15,7 +15,6 @@ def create_tables():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 1. 用户表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users(
         id SERIAL PRIMARY KEY,
@@ -42,7 +41,6 @@ def create_tables():
     )
     """)
 
-    # 3. 模拟历史表
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS simulation_history (
         id SERIAL PRIMARY KEY,
