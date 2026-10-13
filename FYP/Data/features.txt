@@ -1,0 +1,11 @@
+duration_ms
+explicit
+danceability
+energy
+loudness
+speechiness
+acousticness
+instrumentalness
+liveness
+valence
+tempo
