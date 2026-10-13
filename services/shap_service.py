@@ -1,53 +1,131 @@
-# shap_service.py
 import joblib
-import pandas as pd
 import numpy as np
+import shap
 
-# 加载回归模型
-saved = joblib.load("models/music_model_xgb_regressor.pkl")
-model = saved["model"]
-scaler = saved.get("scaler", None)
-features = saved["features"]
+MODEL_PATH = "machine_learning/songlytics_regression_rf.pkl"
 
-# 回归模型使用的阈值
-LOW_THRESHOLD = 34
-HIGH_THRESHOLD = 67
+model_data = joblib.load(MODEL_PATH)
+
+pipeline = model_data["model"]
+FEATURES = model_data["features"]
+
+preprocessor = pipeline.named_steps["preprocessor"]
+random_forest = pipeline.named_steps["random_forest"]
+
+explainer = shap.TreeExplainer(random_forest)
+
+def clean_feature_name(name):
+    name = str(name)
+
+    if name.startswith("genre__track_genre_"):
+        return "track_genre"
+
+    if name.startswith("remainder__"):
+        return name.replace("remainder__", "", 1)
+
+    return name
 
 def explain(features_df):
-    """解释回归模型的预测结果"""
-    features_df = features_df[features].astype(float)
-    
-    if scaler is not None:
-        features_scaled = scaler.transform(features_df)
-        features_df = pd.DataFrame(features_scaled, columns=features)
-    
-    # 对于回归模型，我们需要使用 SHAP
-    try:
-        import shap
-        # 创建解释器
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(features_df)[0]
-        
-        # 整理结果
-        explanation = []
-        for i, feature in enumerate(features):
-            impact = float(shap_values[i])
-            explanation.append({
-                "feature": feature,
-                "impact": impact,
-                "direction": "positive" if impact > 0 else "negative"
-            })
-        
-        return explanation
-    except Exception as e:
-        print(f"SHAP error: {e}")
-        # 如果 SHAP 失败，返回基于特征重要性的近似解释
-        importance = model.feature_importances_
-        explanation = []
-        for i, feature in enumerate(features):
-            explanation.append({
-                "feature": feature,
-                "impact": float(importance[i]),
-                "direction": "positive"
-            })
-        return explanation
+    missing = [
+        feature
+        for feature in FEATURES
+        if feature not in features_df.columns
+    ]
+
+    if missing:
+        raise ValueError(
+            "Missing required features: "
+            + ", ".join(missing)
+        )
+
+    input_df = features_df[FEATURES].copy()
+
+    transformed = preprocessor.transform(input_df)
+
+    if hasattr(transformed, "toarray"):
+        transformed = transformed.toarray()
+
+    transformed = np.asarray(
+        transformed,
+        dtype=float
+    )
+
+    feature_names = (
+        preprocessor
+        .get_feature_names_out()
+        .tolist()
+    )
+
+    shap_values = explainer.shap_values(
+        transformed,
+        approximate=True,
+        check_additivity=False
+    )
+
+    if isinstance(shap_values, list):
+        shap_values = shap_values[0]
+
+    shap_values = np.asarray(shap_values)
+
+    if shap_values.ndim == 1:
+        impacts = shap_values
+    else:
+        impacts = shap_values[0]
+
+    grouped = {}
+
+    for feature_name, impact in zip(
+        feature_names,
+        impacts
+    ):
+        clean_name = clean_feature_name(
+            feature_name
+        )
+
+        grouped[clean_name] = (
+            grouped.get(clean_name, 0.0)
+            + float(impact)
+        )
+
+    explanation = []
+
+    for feature, impact in grouped.items():
+        explanation.append({
+            "feature": feature,
+            "impact": float(impact)
+        })
+
+    explanation.sort(
+        key=lambda item: abs(item["impact"]),
+        reverse=True
+    )
+
+    return explanation
+
+def get_base_value():
+    expected_value = explainer.expected_value
+
+    if isinstance(
+        expected_value,
+        (list, tuple, np.ndarray)
+    ):
+        expected_value = np.asarray(
+            expected_value
+        ).flatten()[0]
+
+    return float(expected_value)
+
+def explain_with_details(features_df):
+    explanation = explain(features_df)
+
+    prediction = float(
+        pipeline.predict(
+            features_df[FEATURES]
+        )[0]
+    )
+
+    return {
+        "prediction": prediction,
+        "base_value": get_base_value(),
+        "features": explanation
+    }

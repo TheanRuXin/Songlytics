@@ -1,101 +1,508 @@
-# spotify_service.py
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+import os
+import time
+import requests
 import pandas as pd
-import streamlit as st
 
-CLIENT_ID = "8da405a927a44e38b765532c2fe981ab"
-CLIENT_SECRET = "9bc17da1916f4954ae0022d0bd067835"
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+SPOTIFY_MARKET = os.getenv("SPOTIFY_MARKET", "MY")
+
+DATASET_PATH = os.getenv(
+    "SPOTIFY_DATASET_PATH",
+    "C:/Users/ruxin/Documents/ruxin/FYP/Data/spotify_cleaned.csv"
+)
+
+TOKEN_URL = "https://accounts.spotify.com/api/token"
+API_BASE_URL = "https://api.spotify.com/v1"
+
+AUDIO_FEATURES = [
+    "duration_ms",
+    "explicit",
+    "danceability",
+    "energy",
+    "key",
+    "loudness",
+    "mode",
+    "speechiness",
+    "acousticness",
+    "instrumentalness",
+    "liveness",
+    "valence",
+    "tempo",
+    "time_signature"
+]
 
 class SpotifyService:
-    def __init__(self):
-        try:
-            self.client_credentials_manager = SpotifyClientCredentials(
-                client_id=CLIENT_ID, 
-                client_secret=CLIENT_SECRET
-            )
-            self.sp = spotipy.Spotify(client_credentials_manager=self.client_credentials_manager)
-            self.is_available = True
-        except Exception as e:
-            st.warning(f"Spotify API not available: {e}. Using local dataset as fallback.")
-            self.is_available = False
-    
-    def search_song(self, query, limit=10):
-        """搜索歌曲"""
-        if not self.is_available:
-            return self._search_local(query, limit)
-        
-        try:
-            results = self.sp.search(q=query, type='track', limit=limit)
-            tracks = []
-            for track in results['tracks']['items']:
-                tracks.append({
-                    'track_id': track['id'],
-                    'song': track['name'],
-                    'artist': ', '.join([a['name'] for a in track['artists']]),
-                    'album_name': track['album']['name'],
-                    'popularity': track['popularity'],  # Spotify's own popularity (0-100)
-                    'explicit': 1 if track['explicit'] else 0
-                })
-            return tracks
-        except Exception as e:
-            st.error(f"Spotify search failed: {e}")
-            return []
-    
-    def get_audio_features(self, track_id):
-        """获取音频特征"""
-        if not self.is_available:
-            return None
-        
-        try:
-            features = self.sp.audio_features(track_id)[0]
-            if not features:
-                return None
-            
-            return {
-                "duration_ms": features['duration_ms'],
-                "explicit": 1 if features.get('explicit', False) else 0,
-                "danceability": features['danceability'],
-                "energy": features['energy'],
-                "loudness": features['loudness'],
-                "speechiness": features['speechiness'],
-                "acousticness": features['acousticness'],
-                "instrumentalness": features['instrumentalness'],
-                "liveness": features['liveness'],
-                "valence": features['valence'],
-                "tempo": features['tempo']
-            }
-        except Exception as e:
-            st.error(f"Failed to get audio features: {e}")
-            return None
-    
-    def _search_local(self, query, limit=10):
-        """Fallback: search in local CSV"""
-        # 读取你的 dataset
-        CSV_PATH = "C:/Users/ruxin/Documents/ruxin/FYP/Data/clean_spotify.csv"
-        df = pd.read_csv(CSV_PATH)
-        
-        df["song"] = df["song"].astype(str).str.lower()
-        df["artist"] = df["artist"].astype(str).str.lower()
-        query_lower = query.lower()
-        
-        # 搜索匹配的歌曲
-        matches = df[
-            df["song"].str.contains(query_lower, na=False) | 
-            df["artist"].str.contains(query_lower, na=False)
-        ].head(limit)
-        
-        tracks = []
-        for _, row in matches.iterrows():
-            tracks.append({
-                'track_id': row.get('track_id', ''),
-                'song': row['song'],
-                'artist': row['artist'],
-                'album_name': row.get('album_name', ''),
-                'popularity': row.get('popularity', 50),
-                'explicit': row.get('explicit', 0)
-            })
-        return tracks
 
-# 全局实例
+    def __init__(self):
+        self.access_token = None
+        self.token_expiry = 0
+        self.dataset = None
+
+    def _validate_credentials(self):
+        if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+            raise RuntimeError(
+                "Spotify credentials are missing. "
+                "Check SPOTIFY_CLIENT_ID and "
+                "SPOTIFY_CLIENT_SECRET in your .env file."
+            )
+
+    def _get_access_token(self):
+        self._validate_credentials()
+
+        if (
+            self.access_token
+            and time.time() < self.token_expiry
+        ):
+            return self.access_token
+
+        response = requests.post(
+            TOKEN_URL,
+            data={
+                "grant_type": "client_credentials"
+            },
+            auth=(
+                SPOTIFY_CLIENT_ID,
+                SPOTIFY_CLIENT_SECRET
+            ),
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                "Unable to authenticate with Spotify API."
+            )
+
+        data = response.json()
+
+        self.access_token = data["access_token"]
+
+        expires_in = int(
+            data.get("expires_in", 3600)
+        )
+
+        self.token_expiry = (
+            time.time()
+            + expires_in
+            - 60
+        )
+
+        return self.access_token
+
+    def _request(
+        self,
+        endpoint,
+        params=None,
+        retry=True
+    ):
+        token = self._get_access_token()
+
+        response = requests.get(
+            f"{API_BASE_URL}{endpoint}",
+            headers={
+                "Authorization": f"Bearer {token}"
+            },
+            params=params,
+            timeout=10
+        )
+
+        if response.status_code == 401 and retry:
+            self.access_token = None
+            self.token_expiry = 0
+
+            return self._request(
+                endpoint,
+                params=params,
+                retry=False
+            )
+
+        if response.status_code == 429:
+            retry_after = int(
+                response.headers.get(
+                    "Retry-After",
+                    1
+                )
+            )
+
+            if retry and retry_after <= 3:
+                time.sleep(retry_after)
+
+                return self._request(
+                    endpoint,
+                    params=params,
+                    retry=False
+                )
+
+            raise RuntimeError(
+                "Spotify rate limit reached. "
+                "Please try again later."
+            )
+
+        if response.status_code == 403:
+            raise RuntimeError(
+                "Spotify denied this API request."
+            )
+
+        if response.status_code == 404:
+            return None
+
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Spotify API error: "
+                f"{response.status_code}"
+            )
+
+        return response.json()
+
+    def _load_dataset(self):
+        if self.dataset is not None:
+            return self.dataset
+
+        if not os.path.exists(DATASET_PATH):
+            raise FileNotFoundError(
+                f"Dataset not found: {DATASET_PATH}"
+            )
+
+        df = pd.read_csv(DATASET_PATH)
+
+        required_columns = [
+            "track_id",
+            "track_name",
+            "artists"
+        ] + AUDIO_FEATURES
+
+        missing = [
+            column
+            for column in required_columns
+            if column not in df.columns
+        ]
+
+        if missing:
+            raise ValueError(
+                "Dataset is missing columns: "
+                + ", ".join(missing)
+            )
+
+        df["track_id"] = (
+            df["track_id"]
+            .astype(str)
+            .str.strip()
+        )
+
+        self.dataset = df
+
+        return self.dataset
+
+    def search_song(
+        self,
+        query,
+        limit=10
+    ):
+        query = str(query).strip()
+
+        if not query:
+            return []
+
+        limit = max(
+            1,
+            min(int(limit), 10)
+        )
+
+        try:
+            data = self._request(
+                "/search",
+                params={
+                    "q": query,
+                    "type": "track",
+                    "limit": limit,
+                    "market": SPOTIFY_MARKET
+                }
+            )
+
+            if not data:
+                return []
+
+            tracks = (
+                data
+                .get("tracks", {})
+                .get("items", [])
+            )
+
+            results = []
+
+            for track in tracks:
+
+                artists = track.get(
+                    "artists",
+                    []
+                )
+
+                artist_names = ", ".join(
+                    artist.get(
+                        "name",
+                        ""
+                    )
+                    for artist in artists
+                )
+
+                album = track.get(
+                    "album",
+                    {}
+                )
+
+                images = album.get(
+                    "images",
+                    []
+                )
+
+                image_url = (
+                    images[0].get("url")
+                    if images
+                    else None
+                )
+
+                external_urls = (
+                    track.get(
+                        "external_urls",
+                        {}
+                    )
+                )
+
+                results.append({
+                    "track_id":
+                        track.get("id"),
+
+                    "song":
+                        track.get(
+                            "name",
+                            "Unknown Song"
+                        ),
+
+                    "artist":
+                        artist_names
+                        or "Unknown Artist",
+
+                    "album_name":
+                        album.get(
+                            "name",
+                            "Unknown Album"
+                        ),
+
+                    "duration_ms":
+                        track.get(
+                            "duration_ms"
+                        ),
+
+                    "explicit":
+                        track.get(
+                            "explicit",
+                            False
+                        ),
+
+                    "popularity":
+                        track.get(
+                            "popularity"
+                        ),
+
+                    "spotify_url":
+                        external_urls.get(
+                            "spotify"
+                        ),
+
+                    "image_url":
+                        image_url
+                })
+
+            return results
+
+        except Exception as e:
+            print(
+                "Spotify search error:",
+                e
+            )
+
+            return []
+
+    def get_track(self, track_id):
+        track_id = str(
+            track_id
+        ).strip()
+
+        if not track_id:
+            return None
+
+        try:
+            return self._request(
+                f"/tracks/{track_id}",
+                params={
+                    "market":
+                        SPOTIFY_MARKET
+                }
+            )
+
+        except Exception as e:
+            print(
+                "Spotify track error:",
+                e
+            )
+
+            return None
+
+    def get_audio_features(
+        self,
+        track_id
+    ):
+        """
+        SONGlytics does not retrieve audio features
+        from Spotify Web API.
+
+        The Spotify track ID is used only to match
+        the corresponding record in the local
+        cleaned dataset.
+        """
+
+        track_id = str(
+            track_id
+        ).strip()
+
+        if not track_id:
+            return None
+
+        try:
+            df = self._load_dataset()
+
+            matching = df[
+                df["track_id"] == track_id
+            ]
+
+            if matching.empty:
+                return None
+
+            row = matching.iloc[0]
+
+            features = {}
+
+            for feature in AUDIO_FEATURES:
+                value = row[feature]
+
+                if pd.isna(value):
+                    return None
+
+                if feature == "explicit":
+                    features[feature] = int(
+                        bool(value)
+                    )
+
+                elif feature in [
+                    "key",
+                    "mode",
+                    "time_signature",
+                    "duration_ms"
+                ]:
+                    features[feature] = int(
+                        value
+                    )
+
+                else:
+                    features[feature] = float(
+                        value
+                    )
+
+            return features
+
+        except Exception as e:
+            print(
+                "Local audio feature error:",
+                e
+            )
+
+            return None
+
+    def find_dataset_track(
+        self,
+        song_name,
+        artist_name
+    ):
+        try:
+            df = self._load_dataset()
+
+            song_name = str(
+                song_name
+            ).strip().lower()
+
+            artist_name = str(
+                artist_name
+            ).strip().lower()
+
+            matching = df[
+                (
+                    df["track_name"]
+                    .astype(str)
+                    .str.lower()
+                    == song_name
+                )
+                &
+                (
+                    df["artists"]
+                    .astype(str)
+                    .str.lower()
+                    .str.contains(
+                        artist_name,
+                        regex=False
+                    )
+                )
+            ]
+
+            if matching.empty:
+                return None
+
+            row = matching.iloc[0]
+
+            return {
+                "track_id":
+                    row["track_id"],
+
+                "track_name":
+                    row["track_name"],
+
+                "artists":
+                    row["artists"],
+
+                "track_genre":
+                    row.get(
+                        "track_genre"
+                    )
+            }
+
+        except Exception as e:
+            print(
+                "Dataset track lookup error:",
+                e
+            )
+
+            return None
+
+    def is_track_in_dataset(
+        self,
+        track_id
+    ):
+        try:
+            df = self._load_dataset()
+
+            track_id = str(
+                track_id
+            ).strip()
+
+            return (
+                df["track_id"]
+                == track_id
+            ).any()
+
+        except Exception:
+            return False
+
 spotify_service = SpotifyService()
