@@ -1,389 +1,678 @@
+import secrets
+import time
+
 import streamlit as st
 
-from services.db_service import initialize_database
+from services.db_service import (
+    initialize_database
+)
+
 from services.auth_service import (
     register_user,
     authenticate_user,
-    get_user_by_id
+    get_user_by_email,
+    reset_password_by_email
 )
 
-@st.cache_resource
+from services.email_service import (
+    send_password_reset_otp
+)
+
+from _pages.profile import (
+    show_profile
+)
+
+OTP_EXPIRY_SECONDS = 300
+
 def setup_database():
-    return initialize_database()
+    try:
+        initialize_database()
+
+    except Exception as e:
+        print(
+            "Database setup error:",
+            e
+        )
 
 def initialize_auth_state():
     defaults = {
         "authenticated": False,
         "user_id": None,
         "username": None,
-        "email": None
+        "email": None,
+        "show_forgot_password": False,
+        "reset_email": None,
+        "reset_otp": None,
+        "reset_otp_expiry": None,
+        "reset_otp_verified": False,
+        "reset_otp_attempts": 0
     }
 
     for key, value in defaults.items():
         if key not in st.session_state:
-            st.session_state[key] = value
+            st.session_state[
+                key
+            ] = value
 
-def set_logged_in_user(user):
-    st.session_state["authenticated"] = True
-    st.session_state["user_id"] = user["id"]
-    st.session_state["username"] = user["username"]
-    st.session_state["email"] = user["email"]
+def set_logged_in_user(
+    user
+):
+    st.session_state[
+        "authenticated"
+    ] = True
 
-def logout_user():
-    auth_keys = [
-        "authenticated",
-        "user_id",
-        "username",
+    st.session_state[
+        "user_id"
+    ] = user[
+        "id"
+    ]
+
+    st.session_state[
+        "username"
+    ] = user[
+        "username"
+    ]
+
+    st.session_state[
+        "email"
+    ] = user[
         "email"
     ]
 
-    prediction_keys = [
-        "prediction_done",
-        "temp_features_df",
-        "temp_song_name",
-        "temp_artist_name",
-        "temp_input_source",
-        "last_prediction_result",
-        "last_features_df",
-        "last_explanation",
-        "sim_features",
-        "song_name",
-        "song_name_for_sim",
-        "show_simulation_mode"
+def clear_reset_state():
+    reset_keys = [
+        "reset_email",
+        "reset_otp",
+        "reset_otp_expiry",
+        "reset_otp_verified",
+        "reset_otp_attempts"
     ]
 
-    for key in auth_keys + prediction_keys:
-        st.session_state.pop(key, None)
+    for key in reset_keys:
+        st.session_state[
+            key
+        ] = (
+            False
+            if key
+            == "reset_otp_verified"
+            else 0
+            if key
+            == "reset_otp_attempts"
+            else None
+        )
+
+def logout_user():
+    keys = [
+        "authenticated",
+        "user_id",
+        "username",
+        "email",
+        "profile_success",
+        "profile_error"
+    ]
+
+    for key in keys:
+        st.session_state.pop(
+            key,
+            None
+        )
 
     initialize_auth_state()
 
-def show_logged_in():
-    user_id = st.session_state.get("user_id")
-    user = get_user_by_id(user_id)
-
-    if not user:
-        logout_user()
-        st.error("Unable to load user account.")
-        return
-
-    st.markdown(
-        """
-        <style>
-        .account-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(120deg, #4ecdc4, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0;
-        }
-
-        .account-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 20px;
-            padding: 28px;
-            color: white;
-            margin: 20px 0;
-        }
-
-        .account-name {
-            font-size: 2rem;
-            font-weight: 700;
-        }
-
-        .account-detail {
-            font-size: 1rem;
-            opacity: 0.9;
-            margin-top: 6px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        '<p class="account-title">👤 My Account</p>',
-        unsafe_allow_html=True
-    )
-
-    st.caption("Manage your SONGlytics account and session")
-
-    st.markdown(
-        f"""
-        <div class="account-card">
-            <div style="font-size: 0.9rem; opacity: 0.85;">
-                Logged in as
-            </div>
-
-            <div class="account-name">
-                {user["username"]}
-            </div>
-
-            <div class="account-detail">
-                📧 {user["email"]}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric(
-            "User ID",
-            user["id"]
+def generate_otp():
+    return str(
+        secrets.randbelow(
+            900000
         )
+        + 100000
+    )
 
-    with col2:
-        if user.get("last_login"):
-            st.metric(
-                "Last Login",
-                user["last_login"].strftime(
-                    "%d %b %Y %H:%M"
+def show_forgot_password():
+    st.subheader(
+        "🔑 Forgot Password"
+    )
+
+    st.caption(
+        "Enter your registered email address "
+        "to receive a verification code."
+    )
+
+    if not st.session_state.get(
+        "reset_email"
+    ):
+        with st.form(
+            "forgot_password_email_form"
+        ):
+            email = st.text_input(
+                "Registered Email",
+                placeholder=(
+                    "you@example.com"
                 )
             )
-        else:
-            st.metric(
-                "Last Login",
-                "Current session"
+
+            send_button = (
+                st.form_submit_button(
+                    "📧 Send Verification Code",
+                    type="primary",
+                    use_container_width=True
+                )
             )
 
-    st.info(
-        "Your prediction and simulation history will be "
-        "saved automatically while you are logged in."
-    )
+        if send_button:
+            email = (
+                str(email)
+                .strip()
+                .lower()
+            )
+
+            if not email:
+                st.error(
+                    "Please enter your email address."
+                )
+
+            else:
+                user = get_user_by_email(
+                    email
+                )
+
+                if not user:
+                    st.error(
+                        "No account was found "
+                        "with this email address."
+                    )
+
+                else:
+                    otp = generate_otp()
+
+                    result = (
+                        send_password_reset_otp(
+                            email,
+                            otp
+                        )
+                    )
+
+                    if result.get(
+                        "success"
+                    ):
+                        st.session_state[
+                            "reset_email"
+                        ] = email
+
+                        st.session_state[
+                            "reset_otp"
+                        ] = otp
+
+                        st.session_state[
+                            "reset_otp_expiry"
+                        ] = (
+                            time.time()
+                            + OTP_EXPIRY_SECONDS
+                        )
+
+                        st.session_state[
+                            "reset_otp_verified"
+                        ] = False
+
+                        st.session_state[
+                            "reset_otp_attempts"
+                        ] = 0
+
+                        st.rerun()
+
+                    else:
+                        st.error(
+                            result.get(
+                                "message",
+                                "Unable to send OTP."
+                            )
+                        )
+
+    elif not st.session_state.get(
+        "reset_otp_verified",
+        False
+    ):
+        st.success(
+            "📧 A 6-digit verification code "
+            f"was sent to "
+            f"{st.session_state['reset_email']}."
+        )
+
+        st.caption(
+            "The code will expire in 5 minutes."
+        )
+
+        with st.form(
+            "verify_otp_form"
+        ):
+            entered_otp = (
+                st.text_input(
+                    "Verification Code",
+                    max_chars=6,
+                    placeholder="6-digit code"
+                )
+            )
+
+            verify_button = (
+                st.form_submit_button(
+                    "✅ Verify Code",
+                    type="primary",
+                    use_container_width=True
+                )
+            )
+
+        if verify_button:
+            expiry = (
+                st.session_state.get(
+                    "reset_otp_expiry"
+                )
+            )
+
+            if (
+                not expiry
+                or time.time() > expiry
+            ):
+                st.error(
+                    "The verification code has expired. "
+                    "Please request a new code."
+                )
+
+            elif (
+                st.session_state.get(
+                    "reset_otp_attempts",
+                    0
+                )
+                >= 5
+            ):
+                st.error(
+                    "Too many incorrect attempts. "
+                    "Please request a new code."
+                )
+
+            elif (
+                entered_otp
+                == st.session_state.get(
+                    "reset_otp"
+                )
+            ):
+                st.session_state[
+                    "reset_otp_verified"
+                ] = True
+
+                st.rerun()
+
+            else:
+                st.session_state[
+                    "reset_otp_attempts"
+                ] += 1
+
+                remaining = (
+                    5
+                    - st.session_state[
+                        "reset_otp_attempts"
+                    ]
+                )
+
+                st.error(
+                    "Incorrect verification code. "
+                    f"{remaining} attempt(s) remaining."
+                )
+
+        col1, col2 = st.columns(
+            2
+        )
+
+        with col1:
+            if st.button(
+                "📧 Resend Code",
+                use_container_width=True
+            ):
+                otp = generate_otp()
+
+                result = (
+                    send_password_reset_otp(
+                        st.session_state[
+                            "reset_email"
+                        ],
+                        otp
+                    )
+                )
+
+                if result.get(
+                    "success"
+                ):
+                    st.session_state[
+                        "reset_otp"
+                    ] = otp
+
+                    st.session_state[
+                        "reset_otp_expiry"
+                    ] = (
+                        time.time()
+                        + OTP_EXPIRY_SECONDS
+                    )
+
+                    st.session_state[
+                        "reset_otp_attempts"
+                    ] = 0
+
+                    st.success(
+                        "A new verification code "
+                        "has been sent."
+                    )
+
+                else:
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to resend code."
+                        )
+                    )
+
+        with col2:
+            if st.button(
+                "✏️ Change Email",
+                use_container_width=True
+            ):
+                clear_reset_state()
+
+                st.rerun()
+
+    else:
+        st.success(
+            "✅ Email verified successfully."
+        )
+
+        st.subheader(
+            "Set New Password"
+        )
+
+        with st.form(
+            "reset_password_form"
+        ):
+            new_password = (
+                st.text_input(
+                    "New Password",
+                    type="password"
+                )
+            )
+
+            confirm_password = (
+                st.text_input(
+                    "Confirm New Password",
+                    type="password"
+                )
+            )
+
+            st.caption(
+                "Password must contain at least "
+                "8 characters, including uppercase, "
+                "lowercase, and a number."
+            )
+
+            reset_button = (
+                st.form_submit_button(
+                    "🔐 Reset Password",
+                    type="primary",
+                    use_container_width=True
+                )
+            )
+
+        if reset_button:
+            result = (
+                reset_password_by_email(
+                    email=(
+                        st.session_state[
+                            "reset_email"
+                        ]
+                    ),
+                    new_password=(
+                        new_password
+                    ),
+                    confirm_password=(
+                        confirm_password
+                    )
+                )
+            )
+
+            if result.get(
+                "success"
+            ):
+                clear_reset_state()
+
+                st.session_state[
+                    "show_forgot_password"
+                ] = False
+
+                st.session_state[
+                    "login_message"
+                ] = (
+                    "✅ Password reset successfully. "
+                    "You can now log in using "
+                    "your new password."
+                )
+
+                st.rerun()
+
+            else:
+                st.error(
+                    result.get(
+                        "message",
+                        "Unable to reset password."
+                    )
+                )
 
     st.divider()
 
     if st.button(
-        "🚪 Log Out",
-        type="primary",
+        "⬅ Back to Login",
         use_container_width=True
     ):
-        logout_user()
-        st.success("Logged out successfully.")
+        clear_reset_state()
+
+        st.session_state[
+            "show_forgot_password"
+        ] = False
+
         st.rerun()
 
-def show_login_form():
-    st.markdown("### 🔐 Login")
-
-    identifier = st.text_input(
-        "Username or Email",
-        placeholder="Enter your username or email",
-        key="login_identifier"
-    )
-
-    password = st.text_input(
-        "Password",
-        type="password",
-        placeholder="Enter your password",
-        key="login_password"
-    )
-
-    if st.button(
-        "🔓 Login",
-        type="primary",
-        use_container_width=True,
-        key="login_button"
-    ):
-        if not identifier.strip():
-            st.warning(
-                "Please enter your username or email."
-            )
-            return
-
-        if not password:
-            st.warning(
-                "Please enter your password."
-            )
-            return
-
-        with st.spinner(
-            "Signing in..."
-        ):
-            result = authenticate_user(
-                identifier,
-                password
-            )
-
-        if result["success"]:
-            set_logged_in_user(
-                result["user"]
-            )
-
-            st.success(
-                f"Welcome back, "
-                f"{result['user']['username']}!"
-            )
-
-            st.rerun()
-
-        else:
-            st.error(
-                result["message"]
-            )
-
-def show_register_form():
-    st.markdown("### ✨ Create Account")
-
-    username = st.text_input(
-        "Username",
-        placeholder="Choose a username",
-        key="register_username"
-    )
-
-    email = st.text_input(
-        "Email",
-        placeholder="you@example.com",
-        key="register_email"
-    )
-
-    password = st.text_input(
-        "Password",
-        type="password",
-        placeholder="Create a strong password",
-        key="register_password"
-    )
-
-    confirm_password = st.text_input(
-        "Confirm Password",
-        type="password",
-        placeholder="Enter the password again",
-        key="register_confirm_password"
-    )
-
-    st.caption(
-        "Password must contain at least 8 characters, "
-        "including uppercase, lowercase and a number."
-    )
-
-    if st.button(
-        "🚀 Create Account",
-        type="primary",
-        use_container_width=True,
-        key="register_button"
-    ):
-        if not username.strip():
-            st.warning(
-                "Please enter a username."
-            )
-            return
-
-        if not email.strip():
-            st.warning(
-                "Please enter an email address."
-            )
-            return
-
-        if not password:
-            st.warning(
-                "Please enter a password."
-            )
-            return
-
-        if password != confirm_password:
-            st.error(
-                "Passwords do not match."
-            )
-            return
-
-        with st.spinner(
-            "Creating your account..."
-        ):
-            result = register_user(
-                username,
-                email,
-                password
-            )
-
-        if result["success"]:
-            set_logged_in_user(
-                result["user"]
-            )
-
-            st.success(
-                "Account created successfully!"
-            )
-
-            st.rerun()
-
-        else:
-            st.error(
-                result["message"]
-            )
-
 def show_login():
+    setup_database()
     initialize_auth_state()
-
-    if not setup_database():
-        st.error(
-            "Unable to connect to the SONGlytics database."
-        )
-
-        st.caption(
-            "Please check your PostgreSQL server and .env configuration."
-        )
-
-        return
 
     if st.session_state.get(
         "authenticated",
         False
     ):
-        show_logged_in()
+        show_profile()
         return
 
-    st.markdown(
-        """
-        <style>
-        .login-title {
-            font-size: 2.6rem;
-            font-weight: 700;
-            background: linear-gradient(120deg, #4ecdc4, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0;
-        }
+    if st.session_state.get(
+        "show_forgot_password",
+        False
+    ):
+        show_forgot_password()
+        return
 
-        .login-subtitle {
-            font-size: 1rem;
-            opacity: 0.8;
-            margin-bottom: 20px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
+    st.title(
+        "🎵 SONGlytics"
     )
 
-    st.markdown(
-        '<p class="login-title">🎵 Welcome to SONGlytics</p>',
-        unsafe_allow_html=True
+    st.caption(
+        "Music analytics and popularity prediction platform"
     )
 
-    st.markdown(
-        '<p class="login-subtitle">'
-        'Sign in to save predictions, simulations and history.'
-        '</p>',
-        unsafe_allow_html=True
-    )
+    if st.session_state.get(
+        "login_message"
+    ):
+        st.success(
+            st.session_state.pop(
+                "login_message"
+            )
+        )
 
     login_tab, register_tab = st.tabs(
         [
             "🔐 Login",
-            "✨ Register"
+            "📝 Register"
         ]
     )
 
     with login_tab:
-        show_login_form()
+        st.subheader(
+            "Welcome Back"
+        )
+
+        with st.form(
+            "login_form"
+        ):
+            login_email = (
+                st.text_input(
+                    "Email",
+                    placeholder=(
+                        "you@example.com"
+                    )
+                )
+            )
+
+            login_password = (
+                st.text_input(
+                    "Password",
+                    type="password"
+                )
+            )
+
+            login_button = (
+                st.form_submit_button(
+                    "Login",
+                    type="primary",
+                    use_container_width=True
+                )
+            )
+
+        if login_button:
+            if (
+                not login_email
+                or not login_password
+            ):
+                st.error(
+                    "Please enter your email "
+                    "and password."
+                )
+
+            else:
+                result = (
+                    authenticate_user(
+                        login_email,
+                        login_password
+                    )
+                )
+
+                if result.get(
+                    "success"
+                ):
+                    set_logged_in_user(
+                        result["user"]
+                    )
+
+                    st.rerun()
+
+                else:
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to login."
+                        )
+                    )
+
+        if st.button(
+            "Forgot Password?",
+            key="forgot_password_button"
+        ):
+            clear_reset_state()
+
+            st.session_state[
+                "show_forgot_password"
+            ] = True
+
+            st.rerun()
 
     with register_tab:
-        show_register_form()
+        st.subheader(
+            "Create Account"
+        )
 
-    st.divider()
+        with st.form(
+            "register_form"
+        ):
+            username = (
+                st.text_input(
+                    "Username",
+                    key="register_username"
+                )
+            )
 
-    st.caption(
-        "🔒 Passwords are securely hashed before being stored "
-        "in PostgreSQL."
-    )
+            email = (
+                st.text_input(
+                    "Email",
+                    key="register_email"
+                )
+            )
+
+            password = (
+                st.text_input(
+                    "Password",
+                    type="password",
+                    key="register_password"
+                )
+            )
+
+            confirm_password = (
+                st.text_input(
+                    "Confirm Password",
+                    type="password",
+                    key="register_confirm_password"
+                )
+            )
+
+            st.caption(
+                "Password must contain at least "
+                "8 characters, including uppercase, "
+                "lowercase, and a number."
+            )
+
+            register_button = (
+                st.form_submit_button(
+                    "Create Account",
+                    type="primary",
+                    use_container_width=True
+                )
+            )
+
+        if register_button:
+            if password != confirm_password:
+                st.error(
+                    "Passwords do not match."
+                )
+
+            else:
+                result = register_user(
+                    username=username,
+                    email=email,
+                    password=password
+                )
+
+                if result.get(
+                    "success"
+                ):
+                    st.success(
+                        "✅ Account created successfully. "
+                        "You can now login."
+                    )
+
+                else:
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to create account."
+                        )
+                    )

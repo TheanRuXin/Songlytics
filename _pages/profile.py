@@ -1,193 +1,460 @@
-# profile.py
-import streamlit as st
-import pandas as pd
-import plotly.express as px
 from datetime import datetime
 
-from services.history_service import get_user_predictions, get_user_simulations
-from services.user_service import get_user_by_id, update_user_profile
+import streamlit as st
+
+from services.auth_service import (
+    get_user_by_id,
+    update_user_profile,
+    change_password
+)
+
+def format_datetime(value):
+    if not value:
+        return "N/A"
+
+    if isinstance(
+        value,
+        datetime
+    ):
+        return value.strftime(
+            "%d %b %Y %H:%M"
+        )
+
+    try:
+        parsed = datetime.fromisoformat(
+            str(value)
+        )
+
+        return parsed.strftime(
+            "%d %b %Y %H:%M"
+        )
+
+    except Exception:
+        return str(value)
 
 def show_profile():
-    st.markdown("""
-        <style>
-        .profile-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(120deg, #4ecdc4, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0;
-        }
-        
-        .profile-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 20px;
-            padding: 25px;
-            color: white;
-            margin-bottom: 20px;
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-        
-        .stat-label {
-            font-size: 0.9rem;
-        }
-        
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<p class="profile-title">👤 My Profile</p>', unsafe_allow_html=True)
-    st.caption("Manage your account information")
-    
-    user_id = st.session_state.get("user_id", 1)
-    user = get_user_by_id(user_id)
+    st.title(
+        "👤 My Profile"
+    )
 
-    if user is None:
-        st.error("User not found. Please login again.")
-        if st.button("Go to Login"):
-            st.session_state.clear()
-            st.rerun()
+    if not st.session_state.get(
+        "authenticated",
+        False
+    ):
+        st.warning(
+            "Please login to view your profile."
+        )
         return
-    
-    username = user.get("username", "N/A")
-    email = user.get("email", "N/A")
-    created_at = user.get("created_at", "N/A")
-    
-    # 获取统计数据
-    df_pred = get_user_predictions(user_id)
-    df_sim = get_user_simulations(user_id)
-    
-    # 统计卡片
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{len(df_pred)}</div>
-                <div class="stat-label">Total Predictions</div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{len(df_sim)}</div>
-                <div class="stat-label">Total Simulations</div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        high_count = len(df_pred[df_pred["prediction"] == "High Popularity"]) if not df_pred.empty else 0
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{high_count}</div>
-                <div class="stat-label">High Popularity Songs</div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        # 计算平均置信度
-        avg_conf = df_pred['probability'].mean() if not df_pred.empty else 0
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{avg_conf:.0f}%</div>
-                <div class="stat-label">Avg Confidence</div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # 账户信息
-    st.subheader("📋 Account Information")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        # 显示当前信息
-        st.markdown(f"""
-            <div class="info-row">
-                <span style="font-weight: bold;">👤 Username</span>
-                <span>{username}</span>
-            </div>
-            <div class="info-row">
-                <span style="font-weight: bold;">📧 Email</span>
-                <span>{email}</span>
-            </div>
-            <div class="info-row">
-                <span style="font-weight: bold;">📅 Member Since</span>
-                <span>{created_at}</span>
-            </div>
-            <div class="info-row">
-                <span style="font-weight: bold;">🕐 Last Active</span>
-                <span>{datetime.now().strftime('%Y-%m-%d %H:%M')}</span>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        # 简单图表：最近7天活动
-        if not df_pred.empty and 'created_at' in df_pred.columns:
-            df_pred['date'] = pd.to_datetime(df_pred['created_at'])
-            weekly_activity = df_pred.groupby(df_pred['date'].dt.date).size().tail(7)
-            st.caption("Last 7 days activity")
-            st.line_chart(weekly_activity, height=150)
-    
-    st.markdown("---")
-    
-    # 编辑设置
-    st.subheader("⚙️ Edit Profile")
-    
-    with st.expander("✏️ Edit Account Information", expanded=True):
-        col1, col2 = st.columns(2)
-        
+
+    user_id = (
+        st.session_state.get(
+            "user_id"
+        )
+    )
+
+    if not user_id:
+        st.error(
+            "Unable to identify the current user."
+        )
+        return
+
+    user = get_user_by_id(
+        user_id
+    )
+
+    if not user:
+        st.error(
+            "Unable to load account information."
+        )
+        return
+
+    if st.session_state.get(
+        "profile_success"
+    ):
+        st.success(
+            st.session_state[
+                "profile_success"
+            ]
+        )
+
+    if st.session_state.get(
+        "profile_error"
+    ):
+        st.error(
+            st.session_state[
+                "profile_error"
+            ]
+        )
+
+    username = user[
+        "username"
+    ]
+
+    email = user[
+        "email"
+    ]
+
+    created_at = user.get(
+        "created_at"
+    )
+
+    last_login = user.get(
+        "last_login"
+    )
+
+    st.subheader(
+        "📋 Account Information"
+    )
+
+    with st.container(
+        border=True
+    ):
+        col1, col2 = st.columns(
+            [
+                1,
+                2
+            ]
+        )
+
         with col1:
-            new_username = st.text_input("New Username", value=username)
-            new_email = st.text_input("New Email", value=email)
-        
+            st.markdown(
+                "**👤 Username**"
+            )
+
         with col2:
-            new_password = st.text_input("New Password", type="password", placeholder="Leave blank to keep current")
-            confirm_password = st.text_input("Confirm Password", type="password", placeholder="Confirm new password")
-        
-        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-        with col_btn1:
-            if st.button("💾 Save Changes", type="primary"):
-                if new_password and new_password != confirm_password:
-                    st.error("❌ Passwords do not match!")
-                elif new_password and len(new_password) < 6:
-                    st.error("❌ Password must be at least 6 characters!")
-                else:
-                    success = update_user_profile(
-                        user_id, 
-                        new_username, 
-                        new_email, 
-                        new_password if new_password else None
+            st.write(
+                username
+            )
+
+        st.divider()
+
+        col1, col2 = st.columns(
+            [
+                1,
+                2
+            ]
+        )
+
+        with col1:
+            st.markdown(
+                "**📧 Email**"
+            )
+
+        with col2:
+            st.write(
+                email
+            )
+
+        st.divider()
+
+        col1, col2 = st.columns(
+            [
+                1,
+                2
+            ]
+        )
+
+        with col1:
+            st.markdown(
+                "**📅 Member Since**"
+            )
+
+        with col2:
+            st.write(
+                format_datetime(
+                    created_at
+                )
+            )
+
+        st.divider()
+
+        col1, col2 = st.columns(
+            [
+                1,
+                2
+            ]
+        )
+
+        with col1:
+            st.markdown(
+                "**🕐 Last Login**"
+            )
+
+        with col2:
+            st.write(
+                format_datetime(
+                    last_login
+                )
+            )
+
+    st.divider()
+
+    if "profile_mode" not in st.session_state:
+        st.session_state["profile_mode"] = None
+
+
+    st.divider()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(
+            "✏️ Edit Profile",
+            use_container_width=True
+        ):
+            if (
+                st.session_state[
+                    "profile_mode"
+                ] == "edit"
+            ):
+                st.session_state[
+                    "profile_mode"
+                ] = None
+            else:
+                st.session_state[
+                    "profile_mode"
+                ] = "edit"
+
+            st.rerun()
+
+
+    with col2:
+        if st.button(
+            "🔐 Change Password",
+            use_container_width=True
+        ):
+            if (
+                st.session_state[
+                    "profile_mode"
+                ] == "password"
+            ):
+                st.session_state[
+                    "profile_mode"
+                ] = None
+            else:
+                st.session_state[
+                    "profile_mode"
+                ] = "password"
+
+            st.rerun()
+
+
+    if (
+        st.session_state[
+            "profile_mode"
+        ] == "edit"
+    ):
+
+        st.subheader(
+            "✏️ Edit Profile"
+        )
+
+        with st.form(
+            "edit_profile_form"
+        ):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                new_username = st.text_input(
+                    "Username",
+                    value=user[
+                        "username"
+                    ]
+                )
+
+            with col2:
+                new_email = st.text_input(
+                    "Email",
+                    value=user[
+                        "email"
+                    ]
+                )
+
+            save_col, cancel_col = (
+                st.columns(2)
+            )
+
+            with save_col:
+                save_profile = (
+                    st.form_submit_button(
+                        "💾 Save Changes",
+                        type="primary",
+                        use_container_width=True
                     )
-                    if success:
-                        st.success("✅ Profile updated successfully!")
-                        st.session_state.username = new_username
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to update profile")
-        
-        with col_btn2:
-            if st.button("🔄 Reset"):
+                )
+
+            with cancel_col:
+                cancel_edit = (
+                    st.form_submit_button(
+                        "Cancel",
+                        use_container_width=True
+                    )
+                )
+
+            if save_profile:
+
+                result = (
+                    update_user_profile(
+                        user_id,
+                        new_username,
+                        new_email
+                    )
+                )
+
+                if result.get(
+                    "success",
+                    False
+                ):
+                    st.session_state[
+                        "profile_success"
+                    ] = result[
+                        "message"
+                    ]
+
+                    st.session_state[
+                        "profile_mode"
+                    ] = None
+
+                    updated_user = (
+                        result.get(
+                            "user"
+                        )
+                    )
+
+                    if updated_user:
+                        st.session_state[
+                            "username"
+                        ] = (
+                            updated_user.get(
+                                "username"
+                            )
+                        )
+
+                        st.session_state[
+                            "email"
+                        ] = (
+                            updated_user.get(
+                                "email"
+                            )
+                        )
+
+                    st.rerun()
+
+                else:
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to update profile."
+                        )
+                    )
+
+            if cancel_edit:
+                st.session_state[
+                    "profile_mode"
+                ] = None
+
                 st.rerun()
-    
-    st.markdown("---")
-    st.caption(f"🎵 Songlytics | Member since {created_at.strftime('%Y-%m-%d')}")
+
+
+    elif (
+        st.session_state[
+            "profile_mode"
+        ] == "password"
+    ):
+
+        st.subheader(
+            "🔐 Change Password"
+        )
+
+        with st.form(
+            "change_password_form"
+        ):
+
+            current_password = (
+                st.text_input(
+                    "Current Password",
+                    type="password"
+                )
+            )
+
+            new_password = (
+                st.text_input(
+                    "New Password",
+                    type="password"
+                )
+            )
+
+            confirm_password = (
+                st.text_input(
+                    "Confirm New Password",
+                    type="password"
+                )
+            )
+
+            st.caption(
+                "Password must contain at least "
+                "8 characters, including uppercase, "
+                "lowercase and a number."
+            )
+
+            save_col, cancel_col = (
+                st.columns(2)
+            )
+
+            with save_col:
+                change_button = (
+                    st.form_submit_button(
+                        "🔐 Change Password",
+                        type="primary",
+                        use_container_width=True
+                    )
+                )
+
+            with cancel_col:
+                cancel_password = (
+                    st.form_submit_button(
+                        "Cancel",
+                        use_container_width=True
+                    )
+                )
+
+            if change_button:
+
+                result = change_password(
+                    user_id,
+                    current_password,
+                    new_password,
+                    confirm_password
+                )
+
+                if result.get(
+                    "success",
+                    False
+                ):
+                    st.session_state[
+                        "profile_success"
+                    ] = result[
+                        "message"
+                    ]
+
+                    st.session_state[
+                        "profile_mode"
+                    ] = None
+
+                    st.rerun()
+
+                else:
+                    st.error(
+                        result.get(
+                            "message",
+                            "Unable to change password."
+                        )
+                    )
+
+            if cancel_password:
+                st.session_state[
+                    "profile_mode"
+                ] = None
+
+                st.rerun()

@@ -2,23 +2,27 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-from services.prediction_service import predict, FEATURES, get_genres
+from services.prediction_service import (
+    predict,
+    FEATURES,
+    get_genres
+)
+
 from services.shap_service import explain
-from services.history_service import save_prediction, save_simulation
-from services.recommendation_service import recommend_feature_changes
-from services.spotify_service import spotify_service
 
-CSV_PATH = "C:/Users/ruxin/Documents/ruxin/FYP/Data/spotify_cleaned.csv"
+from services.history_service import (
+    save_prediction,
+    save_simulation
+)
 
-@st.cache_data
-def load_dataset():
-    df = pd.read_csv(CSV_PATH)
+from services.recommendation_service import (
+    recommend_feature_changes
+)
 
-    df["song"] = df["track_name"].astype(str)
-    df["artist"] = df["artists"].astype(str)
-    df["song_artist"] = df["song"] + " - " + df["artist"]
+from services.spotify_service import (
+    spotify_service
+)
 
-    return df
 
 def clear_prediction_state():
     keys = [
@@ -33,14 +37,36 @@ def clear_prediction_state():
         "sim_features",
         "song_name",
         "song_name_for_sim",
-        "show_simulation_mode"
+        "show_simulation_mode",
+        "return_from_simulation"
     ]
 
     for key in keys:
-        st.session_state.pop(key, None)
+        st.session_state.pop(
+            key,
+            None
+        )
+
 
 def get_logged_in_user_id():
-    return st.session_state.get("user_id")
+    return st.session_state.get(
+        "user_id"
+    )
+
+
+def clamp(
+    value,
+    minimum,
+    maximum
+):
+    return max(
+        minimum,
+        min(
+            maximum,
+            value
+        )
+    )
+
 
 def display_prediction_results(
     result,
@@ -49,93 +75,46 @@ def display_prediction_results(
 ):
     label = result["label"]
     score = result["score"]
-    mae = result.get("mae", 0)
-
-    if label == "High Popularity":
-        color = "#48dbfb"
-        emoji = "🚀"
-        status = "This song has high predicted popularity."
-
-    elif label == "Medium Popularity":
-        color = "#feca57"
-        emoji = "📈"
-        status = "This song has moderate predicted popularity."
-
-    else:
-        color = "#ff6b6b"
-        emoji = "⚠️"
-        status = "This song has low predicted popularity."
-
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(
-                135deg,
-                {color},
-                {color}dd
-            );
-            border-radius: 20px;
-            padding: 25px;
-            margin: 20px 0;
-        ">
-            <div style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 20px;
-            ">
-                <div>
-                    <div style="
-                        font-size: 1rem;
-                        opacity: 0.9;
-                    ">
-                        AI Prediction Result
-                    </div>
-
-                    <div style="
-                        font-size: 2.5rem;
-                        font-weight: bold;
-                    ">
-                        {emoji} {label}
-                    </div>
-
-                    <div style="
-                        font-size: 0.9rem;
-                        opacity: 0.9;
-                    ">
-                        {status}
-                    </div>
-                </div>
-
-                <div style="text-align: center;">
-                    <div style="
-                        font-size: 0.9rem;
-                        opacity: 0.9;
-                    ">
-                        Predicted Score
-                    </div>
-
-                    <div style="
-                        font-size: 2rem;
-                        font-weight: bold;
-                    ">
-                        {score:.1f}
-                    </div>
-
-                    <div style="
-                        font-size: 0.8rem;
-                        opacity: 0.8;
-                    ">
-                        out of 100
-                    </div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    mae = result.get(
+        "mae",
+        0
     )
 
-    col1, col2 = st.columns(2)
+    if label == "High Popularity":
+        emoji = "🚀"
+
+        status = (
+            "This song has high "
+            "predicted popularity."
+        )
+
+    elif label == "Medium Popularity":
+        emoji = "📈"
+
+        status = (
+            "This song has moderate "
+            "predicted popularity."
+        )
+
+    else:
+        emoji = "⚠️"
+
+        status = (
+            "This song has low "
+            "predicted popularity."
+        )
+
+    st.subheader(
+        f"{emoji} {label}"
+    )
+
+    st.write(
+        status
+    )
+
+    col1, col2 = st.columns(
+        2
+    )
 
     with col1:
         st.metric(
@@ -150,16 +129,20 @@ def display_prediction_results(
         )
 
     st.caption(
-        "The prediction is an estimated popularity score generated "
-        "by the Random Forest regression model."
+        "The prediction is an estimated "
+        "popularity score generated by the "
+        "Random Forest regression model."
     )
 
     if explanation:
-        st.subheader("📊 Feature Impact Analysis")
+        st.subheader(
+            "📊 Feature Impact Analysis"
+        )
 
         st.caption(
-            "Positive SHAP values push the model prediction higher, "
-            "while negative values push it lower."
+            "Positive SHAP values push the "
+            "model prediction higher, while "
+            "negative values push it lower."
         )
 
         df_exp = pd.DataFrame(
@@ -167,12 +150,17 @@ def display_prediction_results(
         )
 
         if (
-            "feature" in df_exp.columns
-            and "impact" in df_exp.columns
+            "feature"
+            in df_exp.columns
+            and "impact"
+            in df_exp.columns
         ):
-            df_exp = df_exp.sort_values(
-                "impact",
-                ascending=True
+            df_exp = (
+                df_exp
+                .sort_values(
+                    "impact",
+                    ascending=True
+                )
             )
 
             fig = go.Figure(
@@ -185,9 +173,14 @@ def display_prediction_results(
                             "#48dbfb"
                             if value > 0
                             else "#ff6b6b"
-                            for value in df_exp["impact"]
+                            for value
+                            in df_exp["impact"]
                         ],
-                        text=df_exp["impact"].round(3),
+                        text=(
+                            df_exp[
+                                "impact"
+                            ].round(3)
+                        ),
                         textposition="outside",
                         hovertemplate=(
                             "Feature: %{y}"
@@ -199,9 +192,12 @@ def display_prediction_results(
             )
 
             fig.update_layout(
-                title="SHAP Feature Impact",
+                title=(
+                    "SHAP Feature Impact"
+                ),
                 xaxis_title=(
-                    "Impact on Predicted Popularity"
+                    "Impact on Predicted "
+                    "Popularity"
                 ),
                 yaxis_title="Feature",
                 height=450,
@@ -222,8 +218,9 @@ def display_prediction_results(
         )
 
         st.caption(
-            "Suggestions are based on model predictions "
-            "and do not imply real-world causation."
+            "Suggestions are based on model "
+            "predictions and do not imply "
+            "real-world causation."
         )
 
         try:
@@ -239,35 +236,29 @@ def display_prediction_results(
                     suggestions,
                     start=1
                 ):
-                    col1, col2 = st.columns(
-                        [1, 10]
-                    )
-
-                    with col1:
+                    with st.container(
+                        border=True
+                    ):
                         st.markdown(
-                            f"### {i}"
-                        )
-
-                    with col2:
-                        st.info(
-                            f"💡 **{suggestion['message']}**"
+                            f"**{i}. "
+                            f"{suggestion['message']}**"
                         )
 
                         if suggestion.get(
                             "action"
                         ):
-                            st.code(
-                                suggestion["action"],
-                                language=None
+                            st.caption(
+                                suggestion[
+                                    "action"
+                                ]
                             )
-
-                    st.divider()
 
             else:
                 st.info(
-                    "No small audio feature adjustment "
-                    "produced a meaningful improvement "
-                    "in the model prediction."
+                    "No small audio feature "
+                    "adjustment produced a "
+                    "meaningful improvement in "
+                    "the model prediction."
                 )
 
         except Exception as e:
@@ -277,23 +268,28 @@ def display_prediction_results(
             )
 
             st.info(
-                "Suggestions are currently unavailable."
+                "Suggestions are currently "
+                "unavailable."
             )
 
     else:
         st.success(
-            "🎉 The model already predicts a relatively "
-            "high popularity score for this song."
+            "🎉 The model already predicts "
+            "a relatively high popularity "
+            "score for this song."
         )
+
 
 def show_simulation_ui():
     st.header(
         "🎛️ What-If Simulation"
     )
 
-    song_name = st.session_state.get(
-        "song_name_for_sim",
-        "Unknown Song"
+    song_name = (
+        st.session_state.get(
+            "song_name_for_sim",
+            "Unknown Song"
+        )
     )
 
     st.write(
@@ -341,11 +337,14 @@ def show_simulation_ui():
     )
 
     st.caption(
-        "Modify the values to see how the model's "
-        "predicted popularity changes."
+        "Modify the values to see how "
+        "the model's predicted popularity "
+        "changes."
     )
 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(
+        2
+    )
 
     input_features = {}
 
@@ -357,9 +356,15 @@ def show_simulation_ui():
             50000,
             600000,
             int(
-                base.get(
-                    "duration_ms",
-                    200000
+                clamp(
+                    int(
+                        base.get(
+                            "duration_ms",
+                            200000
+                        )
+                    ),
+                    50000,
+                    600000
                 )
             )
         )
@@ -393,9 +398,15 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "danceability",
-                    0.5
+                clamp(
+                    float(
+                        base.get(
+                            "danceability",
+                            0.5
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
             )
         )
@@ -407,10 +418,29 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "energy",
-                    0.5
+                clamp(
+                    float(
+                        base.get(
+                            "energy",
+                            0.5
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
+            )
+        )
+
+        current_key = int(
+            clamp(
+                int(
+                    base.get(
+                        "key",
+                        0
+                    )
+                ),
+                0,
+                11
             )
         )
 
@@ -418,13 +448,10 @@ def show_simulation_ui():
             "key"
         ] = st.selectbox(
             "🎼 Key",
-            list(range(12)),
-            index=int(
-                base.get(
-                    "key",
-                    0
-                )
-            )
+            list(
+                range(12)
+            ),
+            index=current_key
         )
 
         input_features[
@@ -434,24 +461,38 @@ def show_simulation_ui():
             -60.0,
             0.0,
             float(
-                base.get(
-                    "loudness",
-                    -10.0
+                clamp(
+                    float(
+                        base.get(
+                            "loudness",
+                            -10.0
+                        )
+                    ),
+                    -60.0,
+                    0.0
                 )
             )
         )
+
+        current_mode = int(
+            base.get(
+                "mode",
+                1
+            )
+        )
+
+        if current_mode not in [
+            0,
+            1
+        ]:
+            current_mode = 1
 
         input_features[
             "mode"
         ] = st.selectbox(
             "🎵 Mode",
             [0, 1],
-            index=int(
-                base.get(
-                    "mode",
-                    1
-                )
-            ),
+            index=current_mode,
             format_func=lambda value: (
                 "Major"
                 if value == 1
@@ -467,9 +508,15 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "speechiness",
-                    0.05
+                clamp(
+                    float(
+                        base.get(
+                            "speechiness",
+                            0.05
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
             )
         )
@@ -481,9 +528,15 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "acousticness",
-                    0.5
+                clamp(
+                    float(
+                        base.get(
+                            "acousticness",
+                            0.5
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
             )
         )
@@ -495,9 +548,15 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "instrumentalness",
-                    0.0
+                clamp(
+                    float(
+                        base.get(
+                            "instrumentalness",
+                            0.0
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
             )
         )
@@ -509,9 +568,15 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "liveness",
-                    0.1
+                clamp(
+                    float(
+                        base.get(
+                            "liveness",
+                            0.1
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
             )
         )
@@ -523,9 +588,15 @@ def show_simulation_ui():
             0.0,
             1.0,
             float(
-                base.get(
-                    "valence",
-                    0.5
+                clamp(
+                    float(
+                        base.get(
+                            "valence",
+                            0.5
+                        )
+                    ),
+                    0.0,
+                    1.0
                 )
             )
         )
@@ -537,9 +608,15 @@ def show_simulation_ui():
             40,
             220,
             int(
-                base.get(
-                    "tempo",
-                    120
+                clamp(
+                    int(
+                        base.get(
+                            "tempo",
+                            120
+                        )
+                    ),
+                    40,
+                    220
                 )
             )
         )
@@ -565,10 +642,12 @@ def show_simulation_ui():
             in time_signature_options
         ):
             time_index = (
-                time_signature_options.index(
+                time_signature_options
+                .index(
                     current_time_signature
                 )
             )
+
         else:
             time_index = 4
 
@@ -626,7 +705,9 @@ def show_simulation_ui():
             )
         )
 
-        new_score = result["score"]
+        new_score = float(
+            result["score"]
+        )
 
         delta = (
             new_score
@@ -640,23 +721,31 @@ def show_simulation_ui():
                 feature
             )
 
-            new_value = input_features.get(
-                feature
+            new_value = (
+                input_features.get(
+                    feature
+                )
             )
 
             if old_value != new_value:
                 changes[feature] = {
-                    "old": old_value,
-                    "new": new_value
+                    "old":
+                        old_value,
+
+                    "new":
+                        new_value
                 }
 
-        user_id = get_logged_in_user_id()
+        user_id = (
+            get_logged_in_user_id()
+        )
 
         if user_id:
             simulation_result = (
                 save_simulation(
                     user_id,
-                    f"{song_name} (simulated)",
+                    f"{song_name} "
+                    "(simulated)",
                     original_score,
                     new_score,
                     changes
@@ -668,7 +757,8 @@ def show_simulation_ui():
                 False
             ):
                 print(
-                    "Simulation history not saved:",
+                    "Simulation history "
+                    "not saved:",
                     simulation_result
                 )
 
@@ -696,7 +786,9 @@ def show_simulation_ui():
                 f"{new_score:.1f}/100"
             )
 
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(
+            2
+        )
 
         with col1:
             st.metric(
@@ -712,9 +804,10 @@ def show_simulation_ui():
             )
 
         st.caption(
-            "The score difference represents a change "
-            "in the model prediction, not a guaranteed "
-            "change in real-world popularity."
+            "The score difference represents "
+            "a change in the model prediction, "
+            "not a guaranteed change in "
+            "real-world popularity."
         )
 
         if explanation:
@@ -736,19 +829,44 @@ def show_simulation_ui():
                     df_exp
                     .sort_values(
                         "impact",
-                        ascending=False
+                        ascending=True
                     )
                 )
 
-                st.bar_chart(
-                    df_exp.set_index(
-                        "feature"
-                    )["impact"]
+                fig = go.Figure(
+                    data=[
+                        go.Bar(
+                            x=df_exp[
+                                "impact"
+                            ],
+                            y=df_exp[
+                                "feature"
+                            ],
+                            orientation="h"
+                        )
+                    ]
+                )
+
+                fig.update_layout(
+                    xaxis_title=(
+                        "Impact on Predicted "
+                        "Popularity"
+                    ),
+                    yaxis_title="Feature",
+                    height=450,
+                    showlegend=False
+                )
+
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
                 )
 
     st.divider()
 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(
+        2
+    )
 
     with col1:
         if st.button(
@@ -771,6 +889,7 @@ def show_simulation_ui():
             ] = True
 
             st.rerun()
+
 
 def show_prediction():
     if st.session_state.get(
@@ -810,16 +929,19 @@ def show_prediction():
     )
 
     st.caption(
-        "AI-powered music popularity prediction "
-        "using audio characteristics"
+        "AI-powered music popularity "
+        "prediction using audio characteristics"
     )
 
-    user_id = get_logged_in_user_id()
+    user_id = (
+        get_logged_in_user_id()
+    )
 
     if not user_id:
         st.info(
-            "ℹ️ You can make predictions without logging in, "
-            "but prediction and simulation history will only "
+            "ℹ️ You can make predictions "
+            "without logging in, but prediction "
+            "and simulation history will only "
             "be saved when you are logged in."
         )
 
@@ -854,9 +976,11 @@ def show_prediction():
             )
         )
 
-        features_df = st.session_state[
-            "last_features_df"
-        ]
+        features_df = (
+            st.session_state[
+                "last_features_df"
+            ]
+        )
 
         display_name = (
             st.session_state.get(
@@ -873,7 +997,9 @@ def show_prediction():
 
         st.divider()
 
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(
+            2
+        )
 
         with col1:
             if st.button(
@@ -887,9 +1013,9 @@ def show_prediction():
                     .to_dict()
                 )
 
-                sim_data["score"] = (
-                    result["score"]
-                )
+                sim_data[
+                    "score"
+                ] = result["score"]
 
                 st.session_state[
                     "sim_features"
@@ -908,7 +1034,9 @@ def show_prediction():
         with col2:
             if st.button(
                 "🔍 Predict Another Song",
-                key="new_prediction_btn_results",
+                key=(
+                    "new_prediction_btn_results"
+                ),
                 use_container_width=True
             ):
                 clear_prediction_state()
@@ -918,8 +1046,9 @@ def show_prediction():
         st.markdown("---")
 
         st.caption(
-            "💡 Powered by Random Forest Regression "
-            "| SHAP Explainability | Spotify API"
+            "💡 Powered by Random Forest "
+            "Regression | SHAP Explainability "
+            "| Spotify API"
         )
 
         return
@@ -927,8 +1056,7 @@ def show_prediction():
     input_mode = st.radio(
         "Select input method:",
         [
-            "🔍 Search Spotify",
-            "📁 Choose from Dataset",
+            "🔍 Search Song",
             "✏️ Manual Input"
         ],
         horizontal=True
@@ -936,14 +1064,14 @@ def show_prediction():
 
     genres = get_genres()
 
-    features_df = None
-    song_name = None
-    artist_name = None
-    input_source = None
-
-    if input_mode == "🔍 Search Spotify":
+    if input_mode == "🔍 Search Song":
         st.markdown(
-            "### 🔍 Search Spotify"
+            "### 🔍 Search for a Song"
+        )
+
+        st.caption(
+            "Search Spotify for songs supported "
+            "by the SONGlytics prediction model."
         )
 
         search_query = st.text_input(
@@ -956,63 +1084,52 @@ def show_prediction():
 
         if search_query:
             with st.spinner(
-                "Searching Spotify..."
+                "Searching supported songs..."
             ):
                 results = (
                     spotify_service
-                    .search_song(
+                    .search_supported_songs(
                         search_query,
                         limit=10
                     )
                 )
 
             if results:
-                search_df = pd.DataFrame(
-                    results
-                )
-
-                search_df["display"] = (
-                    search_df["song"]
-                    + " - "
-                    + search_df["artist"]
-                )
-
-                selected_display = (
+                selected_index = (
                     st.selectbox(
                         "Select a song:",
-                        search_df[
-                            "display"
-                        ].tolist()
+                        options=list(
+                            range(
+                                len(results)
+                            )
+                        ),
+                        format_func=lambda i: (
+                            f"{results[i]['song']} "
+                            f"- "
+                            f"{results[i]['artist']}"
+                        )
                     )
                 )
 
-                selected_row = (
-                    search_df[
-                        search_df["display"]
-                        == selected_display
-                    ]
-                    .iloc[0]
-                )
+                selected = results[
+                    selected_index
+                ]
 
-                track_id = (
-                    selected_row[
-                        "track_id"
-                    ]
-                )
+                song_name = selected[
+                    "song"
+                ]
 
-                song_name = (
-                    selected_row[
-                        "song"
-                    ]
-                )
+                artist_name = selected[
+                    "artist"
+                ]
 
-                artist_name = (
-                    selected_row[
-                        "artist"
-                    ]
-                )
+                features_dict = selected[
+                    "features"
+                ]
 
-                col1, col2 = st.columns(2)
+                col1, col2 = st.columns(
+                    2
+                )
 
                 with col1:
                     st.info(
@@ -1021,226 +1138,41 @@ def show_prediction():
                     )
 
                 with col2:
-                    spotify_popularity = (
-                        selected_row.get(
-                            "popularity"
-                        )
+                    st.info(
+                        f"🎧 **Genre:** "
+                        f"{features_dict['track_genre']}"
                     )
-
-                    if pd.notna(
-                        spotify_popularity
-                    ):
-                        st.info(
-                            "⭐ **Spotify Popularity:** "
-                            f"{spotify_popularity}/100"
-                        )
-
-                    else:
-                        st.info(
-                            "⭐ Spotify popularity "
-                            "score unavailable"
-                        )
 
                 st.caption(
                     "📀 **Album:** "
-                    f"{selected_row.get('album_name', 'N/A')}"
+                    f"{selected.get('album_name', 'N/A')}"
                 )
 
-                spotify_genre = (
-                    st.selectbox(
-                        "🎧 Select Track Genre",
-                        genres,
-                        key="spotify_genre"
+                if selected.get(
+                    "popularity"
+                ) is not None:
+                    st.caption(
+                        "⭐ Spotify Popularity: "
+                        f"{selected['popularity']}/100"
                     )
-                )
+
+                if selected.get(
+                    "image_url"
+                ):
+                    st.image(
+                        selected["image_url"],
+                        width=180
+                    )
 
                 if st.button(
-                    "🎵 Load Audio Features",
-                    key="spotify_features",
+                    "✅ Use This Song",
+                    key="spotify_use_song",
                     type="primary"
                 ):
-                    with st.spinner(
-                        "Checking SONGlytics dataset..."
-                    ):
-                        features_dict = (
-                            spotify_service
-                            .get_audio_features(
-                                track_id
-                            )
-                        )
-
-                    if features_dict:
-                        features_dict[
-                            "track_genre"
-                        ] = spotify_genre
-
-                        missing = [
-                            feature
-                            for feature
-                            in FEATURES
-                            if feature
-                            not in features_dict
-                        ]
-
-                        if missing:
-                            st.error(
-                                "Missing features: "
-                                + ", ".join(
-                                    missing
-                                )
-                            )
-
-                        else:
-                            features_df = (
-                                pd.DataFrame(
-                                    [features_dict]
-                                )[FEATURES]
-                            )
-
-                            st.session_state[
-                                "temp_features_df"
-                            ] = features_df
-
-                            st.session_state[
-                                "temp_song_name"
-                            ] = song_name
-
-                            st.session_state[
-                                "temp_artist_name"
-                            ] = artist_name
-
-                            st.session_state[
-                                "temp_input_source"
-                            ] = "Spotify"
-
-                            st.success(
-                                "✅ Audio features loaded successfully."
-                            )
-
-                    else:
-                        st.warning(
-                            "This track was found on Spotify, "
-                            "but its audio features are not "
-                            "available in the SONGlytics dataset. "
-                            "Please use Manual Input instead."
-                        )
-
-            else:
-                st.warning(
-                    "No Spotify results found."
-                )
-
-    elif input_mode == "📁 Choose from Dataset":
-        st.markdown(
-            "### 📁 Choose a Song from Dataset"
-        )
-
-        df = load_dataset()
-
-        song_list = (
-            df["song_artist"]
-            .tolist()
-        )
-
-        col1, col2 = st.columns(
-            [3, 1]
-        )
-
-        with col1:
-            search_term = st.text_input(
-                "🔍 Search song or artist:",
-                placeholder=(
-                    "e.g. Blinding Lights "
-                    "or Taylor Swift"
-                ),
-                key="dataset_search"
-            )
-
-        with col2:
-            st.write("")
-            st.write("")
-
-            browse_mode = st.toggle(
-                "📋 Browse full list",
-                key="browse_mode"
-            )
-
-        selected = None
-
-        if browse_mode:
-            selected = st.selectbox(
-                "Choose a song:",
-                song_list,
-                key="dataset_browse"
-            )
-
-        elif search_term:
-            search_lower = (
-                search_term.lower()
-            )
-
-            filtered = [
-                song
-                for song
-                in song_list
-                if search_lower
-                in song.lower()
-            ]
-
-            if filtered:
-                selected = st.selectbox(
-                    f"Found {len(filtered)} matches:",
-                    filtered[:20],
-                    key="dataset_result"
-                )
-
-                st.caption(
-                    f"Showing "
-                    f"{min(20, len(filtered))} "
-                    f"of {len(filtered)} matches"
-                )
-
-            else:
-                st.warning(
-                    "No matching song found."
-                )
-
-        if selected:
-            song_name, artist_name = (
-                selected.split(
-                    " - ",
-                    1
-                )
-            )
-
-            st.success(
-                f"✅ Selected: "
-                f"**{song_name}** "
-                f"by **{artist_name}**"
-            )
-
-            if st.button(
-                "🚀 Load Features",
-                key="dataset_load",
-                type="primary"
-            ):
-                row = df[
-                    (
-                        df["song"]
-                        == song_name
-                    )
-                    &
-                    (
-                        df["artist"]
-                        == artist_name
-                    )
-                ]
-
-                if not row.empty:
                     features_df = (
-                        row[FEATURES]
-                        .iloc[[0]]
-                        .copy()
+                        pd.DataFrame(
+                            [features_dict]
+                        )[FEATURES]
                     )
 
                     st.session_state[
@@ -1257,16 +1189,20 @@ def show_prediction():
 
                     st.session_state[
                         "temp_input_source"
-                    ] = "Dataset"
+                    ] = "Spotify"
 
                     st.success(
-                        "✅ Features loaded from dataset."
+                        "✅ Song features "
+                        "loaded successfully."
                     )
 
-                else:
-                    st.error(
-                        "Unable to load this song."
-                    )
+            else:
+                st.warning(
+                    "No supported songs were "
+                    "found in the SONGlytics "
+                    "dataset. Try another search "
+                    "or use Manual Input."
+                )
 
     else:
         st.markdown(
@@ -1274,17 +1210,22 @@ def show_prediction():
         )
 
         st.caption(
-            "Enter the song's audio characteristics below."
+            "Enter the song's audio "
+            "characteristics below."
         )
 
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(
+            2
+        )
 
         with col1:
-            duration_ms = st.number_input(
-                "📏 Duration (ms)",
-                min_value=60000,
-                max_value=600000,
-                value=180000
+            duration_ms = (
+                st.number_input(
+                    "📏 Duration (ms)",
+                    min_value=60000,
+                    max_value=600000,
+                    value=180000
+                )
             )
 
             danceability = st.slider(
@@ -1317,12 +1258,15 @@ def show_prediction():
 
             key = st.selectbox(
                 "🎼 Key",
-                list(range(12))
+                list(
+                    range(12)
+                )
             )
 
             mode = st.selectbox(
                 "🎵 Mode",
                 [0, 1],
+                index=1,
                 format_func=lambda value: (
                     "Major"
                     if value == 1
@@ -1338,11 +1282,13 @@ def show_prediction():
                 0.3
             )
 
-            instrumentalness = st.slider(
-                "🎹 Instrumentalness",
-                0.0,
-                1.0,
-                0.0
+            instrumentalness = (
+                st.slider(
+                    "🎹 Instrumentalness",
+                    0.0,
+                    1.0,
+                    0.0
+                )
             )
 
             liveness = st.slider(
@@ -1368,13 +1314,23 @@ def show_prediction():
 
             explicit = st.selectbox(
                 "🔞 Explicit",
-                ["No", "Yes"]
+                [
+                    "No",
+                    "Yes"
+                ]
             )
 
             time_signature = (
                 st.selectbox(
                     "🥁 Time Signature",
-                    [0, 1, 2, 3, 4, 5],
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
                     index=4
                 )
             )
@@ -1407,7 +1363,9 @@ def show_prediction():
         ):
             features_dict = {
                 "duration_ms":
-                    duration_ms,
+                    int(
+                        duration_ms
+                    ),
 
                 "explicit":
                     1
@@ -1415,40 +1373,64 @@ def show_prediction():
                     else 0,
 
                 "danceability":
-                    danceability,
+                    float(
+                        danceability
+                    ),
 
                 "energy":
-                    energy,
+                    float(
+                        energy
+                    ),
 
                 "key":
-                    key,
+                    int(
+                        key
+                    ),
 
                 "loudness":
-                    loudness,
+                    float(
+                        loudness
+                    ),
 
                 "mode":
-                    mode,
+                    int(
+                        mode
+                    ),
 
                 "speechiness":
-                    speechiness,
+                    float(
+                        speechiness
+                    ),
 
                 "acousticness":
-                    acousticness,
+                    float(
+                        acousticness
+                    ),
 
                 "instrumentalness":
-                    instrumentalness,
+                    float(
+                        instrumentalness
+                    ),
 
                 "liveness":
-                    liveness,
+                    float(
+                        liveness
+                    ),
 
                 "valence":
-                    valence,
+                    float(
+                        valence
+                    ),
 
                 "tempo":
-                    tempo,
+                    float(
+                        tempo
+                    ),
 
                 "time_signature":
-                    time_signature,
+                    int(
+                        time_signature
+                    ),
 
                 "track_genre":
                     track_genre
@@ -1509,7 +1491,11 @@ def show_prediction():
 
         col1, col2, col3 = (
             st.columns(
-                [2, 1, 1]
+                [
+                    2,
+                    1,
+                    1
+                ]
             )
         )
 
@@ -1543,15 +1529,25 @@ def show_prediction():
         if predict_button:
             try:
                 with st.spinner(
-                    "🔮 Analyzing song features..."
+                    "🔮 Analyzing song "
+                    "features..."
                 ):
                     result = predict(
                         features_df
                     )
 
-                    explanation = explain(
-                        features_df
-                    )
+                    try:
+                        explanation = explain(
+                            features_df
+                        )
+
+                    except Exception as e:
+                        print(
+                            "SHAP error:",
+                            e
+                        )
+
+                        explanation = []
 
                 display_name = (
                     f"{song_name} - "
@@ -1569,7 +1565,9 @@ def show_prediction():
                             display_name,
                             result["label"],
                             result["score"],
-                            input_source=input_source,
+                            input_source=(
+                                input_source
+                            ),
                             features=(
                                 features_df
                                 .iloc[0]
@@ -1627,14 +1625,14 @@ def show_prediction():
             except Exception as e:
                 st.error(
                     "Prediction failed. "
-                    f"Please check the input data. "
+                    "Please check the input data. "
                     f"Error: {e}"
                 )
 
     else:
         st.info(
-            "👆 Please select a song "
-            "or enter features above "
+            "👆 Search for a supported song "
+            "or enter features manually "
             "to start prediction."
         )
 
@@ -1642,5 +1640,5 @@ def show_prediction():
 
     st.caption(
         "💡 Powered by Random Forest Regression "
-        "| SHAP Explainability"
+        "| SHAP Explainability | Spotify API"
     )

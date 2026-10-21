@@ -5,7 +5,9 @@ import pandas as pd
 
 from dotenv import load_dotenv
 
-load_dotenv()
+
+load_dotenv(override=True)
+
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
@@ -18,6 +20,7 @@ DATASET_PATH = os.getenv(
 
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 API_BASE_URL = "https://api.spotify.com/v1"
+
 
 AUDIO_FEATURES = [
     "duration_ms",
@@ -35,6 +38,7 @@ AUDIO_FEATURES = [
     "tempo",
     "time_signature"
 ]
+
 
 class SpotifyService:
 
@@ -172,7 +176,8 @@ class SpotifyService:
         required_columns = [
             "track_id",
             "track_name",
-            "artists"
+            "artists",
+            "track_genre"
         ] + AUDIO_FEATURES
 
         missing = [
@@ -189,6 +194,18 @@ class SpotifyService:
 
         df["track_id"] = (
             df["track_id"]
+            .astype(str)
+            .str.strip()
+        )
+
+        df["track_name"] = (
+            df["track_name"]
+            .astype(str)
+            .str.strip()
+        )
+
+        df["artists"] = (
+            df["artists"]
             .astype(str)
             .str.strip()
         )
@@ -235,7 +252,6 @@ class SpotifyService:
             results = []
 
             for track in tracks:
-
                 artists = track.get(
                     "artists",
                     []
@@ -265,11 +281,9 @@ class SpotifyService:
                     else None
                 )
 
-                external_urls = (
-                    track.get(
-                        "external_urls",
-                        {}
-                    )
+                external_urls = track.get(
+                    "external_urls",
+                    {}
                 )
 
                 results.append({
@@ -327,7 +341,10 @@ class SpotifyService:
 
             return []
 
-    def get_track(self, track_id):
+    def get_track(
+        self,
+        track_id
+    ):
         track_id = str(
             track_id
         ).strip()
@@ -354,30 +371,74 @@ class SpotifyService:
 
     def get_audio_features(
         self,
-        track_id
+        track_id,
+        song_name=None,
+        artist_name=None
     ):
-        """
-        SONGlytics does not retrieve audio features
-        from Spotify Web API.
-
-        The Spotify track ID is used only to match
-        the corresponding record in the local
-        cleaned dataset.
-        """
-
         track_id = str(
             track_id
         ).strip()
-
-        if not track_id:
-            return None
 
         try:
             df = self._load_dataset()
 
             matching = df[
-                df["track_id"] == track_id
+                df["track_id"]
+                == track_id
             ]
+
+            if (
+                matching.empty
+                and song_name
+                and artist_name
+            ):
+                song_normalized = (
+                    str(song_name)
+                    .strip()
+                    .lower()
+                )
+
+                artist_names = [
+                    artist.strip().lower()
+                    for artist
+                    in str(artist_name).split(",")
+                    if artist.strip()
+                ]
+
+                song_mask = (
+                    df["track_name"]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    == song_normalized
+                )
+
+                artist_column = (
+                    df["artists"]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                )
+
+                artist_mask = pd.Series(
+                    False,
+                    index=df.index
+                )
+
+                for artist in artist_names:
+                    artist_mask = (
+                        artist_mask
+                        | artist_column.str.contains(
+                            artist,
+                            regex=False,
+                            na=False
+                        )
+                    )
+
+                matching = df[
+                    song_mask
+                    & artist_mask
+                ]
 
             if matching.empty:
                 return None
@@ -412,6 +473,19 @@ class SpotifyService:
                         value
                     )
 
+            genre = row.get(
+                "track_genre"
+            )
+
+            if pd.isna(genre):
+                return None
+
+            features[
+                "track_genre"
+            ] = str(
+                genre
+            ).strip()
+
             return features
 
         except Exception as e:
@@ -421,6 +495,38 @@ class SpotifyService:
             )
 
             return None
+
+    def search_supported_songs(
+        self,
+        query,
+        limit=10
+    ):
+        spotify_results = self.search_song(
+            query,
+            limit=limit
+        )
+
+        supported = []
+
+        for track in spotify_results:
+            features = self.get_audio_features(
+                track_id=track["track_id"],
+                song_name=track["song"],
+                artist_name=track["artist"]
+            )
+
+            if features:
+                result = track.copy()
+
+                result[
+                    "features"
+                ] = features
+
+                supported.append(
+                    result
+                )
+
+        return supported
 
     def find_dataset_track(
         self,
@@ -442,6 +548,7 @@ class SpotifyService:
                 (
                     df["track_name"]
                     .astype(str)
+                    .str.strip()
                     .str.lower()
                     == song_name
                 )
@@ -452,7 +559,8 @@ class SpotifyService:
                     .str.lower()
                     .str.contains(
                         artist_name,
-                        regex=False
+                        regex=False,
+                        na=False
                     )
                 )
             ]
@@ -473,9 +581,7 @@ class SpotifyService:
                     row["artists"],
 
                 "track_genre":
-                    row.get(
-                        "track_genre"
-                    )
+                    row["track_genre"]
             }
 
         except Exception as e:
@@ -504,5 +610,6 @@ class SpotifyService:
 
         except Exception:
             return False
+
 
 spotify_service = SpotifyService()
