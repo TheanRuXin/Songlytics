@@ -864,20 +864,20 @@ def show_simulation_ui():
 
     st.divider()
 
-    col1, col2 = st.columns(
-        2
-    )
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         if st.button(
             "🔄 Reset Simulation",
+            key="reset_simulation",
             use_container_width=True
         ):
             st.rerun()
 
     with col2:
         if st.button(
-            "⬅ Back to Prediction",
+            "⬅ Back to Prediction Result",
+            key="back_to_prediction_result",
             use_container_width=True
         ):
             st.session_state[
@@ -888,6 +888,15 @@ def show_simulation_ui():
                 "return_from_simulation"
             ] = True
 
+            st.rerun()
+
+    with col3:
+        if st.button(
+            "🎵 Predict Another Song",
+            key="simulation_predict_another",
+            use_container_width=True
+        ):
+            clear_prediction_state()
             st.rerun()
 
 
@@ -997,9 +1006,7 @@ def show_prediction():
 
         st.divider()
 
-        col1, col2 = st.columns(
-            2
-        )
+        col1, col2 = st.columns(2)
 
         with col1:
             if st.button(
