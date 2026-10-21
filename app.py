@@ -5,10 +5,11 @@ from _pages.prediction import show_prediction
 from _pages.history import show_history
 from _pages.login import show_login, logout_user
 from _pages.analysis import show_analysis
+from _pages.profile import show_profile
 
 
 st.set_page_config(
-    page_title="SONGlytics",
+    page_title="Songlytics",
     page_icon="🎵",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -55,7 +56,7 @@ def show_home():
     )
 
     st.markdown(
-        '<p class="home-title">🎵 SONGlytics</p>',
+        '<p class="home-title">🎵 Songlytics</p>',
         unsafe_allow_html=True
     )
 
@@ -64,10 +65,10 @@ def show_home():
         unsafe_allow_html=True
     )
 
-    st.markdown("### Welcome to SONGlytics")
+    st.markdown("### Welcome to Songlytics")
 
     st.write(
-        "SONGlytics analyzes musical characteristics and uses machine learning "
+        "Songlytics analyzes musical characteristics and uses machine learning "
         "to estimate a song's popularity score while providing interactive "
         "analytics and model explanations."
     )
@@ -98,7 +99,7 @@ def show_home():
                 "push a model prediction higher or lower."
             )
 
-    st.markdown("### SONGlytics Features")
+    st.markdown("### Songlytics Features")
 
     col1, col2 = st.columns(2)
 
@@ -107,7 +108,7 @@ def show_home():
             st.markdown("#### 🎧 Multiple Input Methods")
             st.write(
                 "Search songs through Spotify, select songs from the "
-                "SONGlytics dataset, or manually enter audio characteristics."
+                "Songlytics dataset, or manually enter audio characteristics."
             )
 
         with st.container(border=True):
@@ -141,7 +142,7 @@ def show_home():
 
 def show_sidebar():
     with st.sidebar:
-        st.markdown("## 🎵 SONGlytics")
+        st.markdown("## 🎵 Songlytics")
         st.caption("Song Popularity Analytics")
 
         st.divider()
@@ -183,8 +184,6 @@ def show_sidebar():
                 logout_user()
                 st.rerun()
 
-        st.caption("SONGlytics FYP")
-
         return navigation
 
 def main():
@@ -214,7 +213,10 @@ def main():
         show_history()
 
     elif navigation == "👤 Account":
-        show_login()
+        if st.session_state.get("authenticated", False):
+            show_profile()
+        else:
+            show_login()
 
 
 if __name__ == "__main__":
