@@ -7,7 +7,6 @@ from _pages.login import show_login, logout_user
 from _pages.analysis import show_analysis
 from _pages.profile import show_profile
 
-
 st.set_page_config(
     page_title="Songlytics",
     page_icon="🎵",
@@ -34,129 +33,107 @@ def initialize_session():
 
 def show_home():
     st.markdown(
-        """
-        <style>
-        .home-title {
-            font-size: 3rem;
-            font-weight: 800;
-            background: linear-gradient(120deg, #4ecdc4, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0;
-        }
-
-        .home-subtitle {
-            font-size: 1.1rem;
-            opacity: 0.8;
-            margin-bottom: 30px;
-        }
-        </style>
-        """,
+        "<h1 style='font-size:70px;'>🎵 Songlytics</h1>",
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        '<p class="home-title">🎵 Songlytics</p>',
-        unsafe_allow_html=True
+    st.subheader(
+        "Music Analytics and Song Popularity Prediction Platform"
     )
-
-    st.markdown(
-        '<p class="home-subtitle">AI-powered song popularity prediction and music analytics.</p>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown("### Welcome to Songlytics")
 
     st.write(
-        "Songlytics analyzes musical characteristics and uses machine learning "
-        "to estimate a song's popularity score while providing interactive "
-        "analytics and model explanations."
+        "Songlytics uses machine learning to predict song popularity "
+        "and provides music analytics, explainable AI, recommendations "
+        "and what-if simulation."
     )
+
+    st.divider()
+
+    st.header("Main Functions")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        with st.container(border=True):
-            st.markdown("### 🔮 Popularity Prediction")
-            st.write(
-                "Predict a continuous popularity score from 0 to 100 "
-                "using the Random Forest regression model."
-            )
+        st.subheader("📊 Analysis")
+        st.write(
+            "Explore popularity trends, genres "
+            "and audio feature patterns."
+        )
 
     with col2:
-        with st.container(border=True):
-            st.markdown("### 📊 Music Analytics")
-            st.write(
-                "Explore song and audio-feature patterns through "
-                "interactive Power BI visualizations."
-            )
+        st.subheader("🔮 Prediction")
+        st.write(
+            "Predict song popularity using "
+            "Random Forest Regression."
+        )
 
     with col3:
-        with st.container(border=True):
-            st.markdown("### 🧠 Explainable AI")
-            st.write(
-                "Use SHAP analysis to understand which characteristics "
-                "push a model prediction higher or lower."
-            )
+        st.subheader("🧠 Explainable AI")
+        st.write(
+            "Understand how audio features "
+            "influence the prediction."
+        )
 
-    st.markdown("### Songlytics Features")
+    st.divider()
 
     col1, col2 = st.columns(2)
 
     with col1:
-        with st.container(border=True):
-            st.markdown("#### 🎧 Multiple Input Methods")
-            st.write(
-                "Search songs through Spotify, select songs from the "
-                "Songlytics dataset, or manually enter audio characteristics."
-            )
-
-        with st.container(border=True):
-            st.markdown("#### 🎛️ What-If Simulation")
-            st.write(
-                "Change selected audio characteristics and observe how "
-                "the model's predicted popularity score responds."
-            )
+        st.subheader("🎛️ What-If Simulation")
+        st.write(
+            "Change audio features and observe "
+            "the new predicted score."
+        )
 
     with col2:
-        with st.container(border=True):
-            st.markdown("#### 📈 Power BI Analysis")
-            st.write(
-                "View interactive dashboards for popularity distributions, "
-                "genres, audio characteristics and dataset trends."
-            )
-
-        with st.container(border=True):
-            st.markdown("#### 🔐 Personal History")
-            st.write(
-                "Sign in to securely save predictions and simulations "
-                "in PostgreSQL for later review."
-            )
+        st.subheader("📚 History")
+        st.write(
+            "Review previous predictions and "
+            "simulation results."
+        )
 
     st.divider()
 
     st.caption(
-        "Random Forest Regression | SHAP Explainability | "
-        "Power BI | PostgreSQL | Spotify Integration"
+        "Streamlit | Python | Random Forest Regression | "
+        "SHAP | PostgreSQL | Spotify"
     )
 
 def show_sidebar():
     with st.sidebar:
-        st.markdown("## 🎵 Songlytics")
-        st.caption("Song Popularity Analytics")
+        st.markdown(
+            "## 🎵 Songlytics"
+        )
+
+        st.caption(
+            "Music Analytics & Popularity Prediction"
+        )
 
         st.divider()
 
-        if st.session_state.get("authenticated", False):
-            username = st.session_state.get("username", "User")
+        if st.session_state.get(
+            "authenticated",
+            False
+        ):
+            username = (
+                st.session_state.get(
+                    "username",
+                    "User"
+                )
+            )
 
             st.success(
                 f"👤 Signed in as **{username}**"
             )
+
         else:
-            st.info("👤 Guest Mode")
+            st.info(
+                "👤 Guest Mode"
+            )
+
             st.caption(
-                "Sign in to save prediction and simulation history."
+                "Sign in to save prediction "
+                "and simulation history."
             )
 
         st.divider()
@@ -175,7 +152,10 @@ def show_sidebar():
 
         st.divider()
 
-        if st.session_state.get("authenticated", False):
+        if st.session_state.get(
+            "authenticated",
+            False
+        ):
             if st.button(
                 "🚪 Log Out",
                 use_container_width=True,
@@ -213,8 +193,13 @@ def main():
         show_history()
 
     elif navigation == "👤 Account":
-        if st.session_state.get("authenticated", False):
+
+        if st.session_state.get(
+            "authenticated",
+            False
+        ):
             show_profile()
+
         else:
             show_login()
 
