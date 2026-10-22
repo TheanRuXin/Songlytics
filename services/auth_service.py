@@ -3,7 +3,6 @@ import bcrypt
 
 from services.db_service import db_cursor
 
-
 def _fetchone_dict(cursor):
     row = cursor.fetchone()
 
@@ -22,14 +21,11 @@ def _fetchone_dict(cursor):
         zip(columns, row)
     )
 
-
 def clean_username(username):
     return str(username).strip()
 
-
 def clean_email(email):
     return str(email).strip().lower()
-
 
 def validate_username(username):
     username = clean_username(username)
@@ -58,7 +54,6 @@ def validate_username(username):
 
     return True, ""
 
-
 def validate_email(email):
     email = clean_email(email)
 
@@ -78,7 +73,6 @@ def validate_email(email):
         )
 
     return True, ""
-
 
 def validate_password(password):
     password = str(password)
@@ -118,13 +112,11 @@ def validate_password(password):
 
     return True, ""
 
-
 def hash_password(password):
     return bcrypt.hashpw(
         password.encode("utf-8"),
         bcrypt.gensalt()
     ).decode("utf-8")
-
 
 def verify_password(
     password,
@@ -148,7 +140,6 @@ def verify_password(
 
     except Exception:
         return False
-
 
 def username_exists(
     username,
@@ -202,7 +193,6 @@ def username_exists(
 
         return False
 
-
 def email_exists(
     email,
     exclude_user_id=None
@@ -254,7 +244,6 @@ def email_exists(
         )
 
         return False
-
 
 def register_user(
     username,
@@ -376,7 +365,6 @@ def register_user(
                 "Unable to create account."
         }
 
-
 def authenticate_user(
     email,
     password
@@ -475,7 +463,6 @@ def authenticate_user(
                 "Unable to login."
         }
 
-
 def get_user_by_id(
     user_id
 ):
@@ -512,7 +499,6 @@ def get_user_by_id(
         )
 
         return None
-
 
 def get_user_by_email(
     email
@@ -551,7 +537,6 @@ def get_user_by_email(
         )
 
         return None
-
 
 def update_user_profile(
     user_id,
@@ -675,7 +660,6 @@ def update_user_profile(
                 "Unable to update profile."
         }
 
-
 def change_password(
     user_id,
     current_password,
@@ -798,7 +782,6 @@ def change_password(
             "message":
                 "Unable to change password."
         }
-
 
 def reset_password_by_email(
     email,

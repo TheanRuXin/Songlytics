@@ -494,7 +494,7 @@ def show_login():
         return
 
     st.title(
-        "🎵 SONGlytics"
+        "🎵 Songlytics"
     )
 
     st.caption(
