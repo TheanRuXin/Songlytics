@@ -737,34 +737,6 @@ Back to Prediction Result
 Predict Another Song
 ```
 
----
-
-# 🧪 Testing
-
-The system should be tested for:
-
-```text
-User registration
-User login
-Invalid login
-Password validation
-Password hashing
-Forgot password OTP
-SQL Injection attempts
-Prediction
-Spotify search
-Manual input
-Simulation
-History saving
-History deletion
-PDF generation
-Database access control
-```
-
-An SQL Injection test may use input similar to:
-
-```text
-' OR '1'='1
 ```
 
 The system should treat this input as normal data rather than executable SQL because parameterized SQL queries are used.
