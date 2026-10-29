@@ -423,51 +423,6 @@ Prediction features and simulation changes are stored using JSON-compatible stru
 
 ---
 
-# 🗂️ Project Structure
-
-A simplified project structure is shown below:
-
-```text
-Songlytics/
-│
-├── app.py
-│
-├── .env
-├── requirements.txt
-│
-├── _pages/
-│   ├── analysis.py
-│   ├── prediction.py
-│   ├── history.py
-│   ├── login.py
-│   └── profile.py
-│
-├── services/
-│   ├── auth_service.py
-│   ├── db_service.py
-│   ├── email_service.py
-│   ├── history_service.py
-│   ├── prediction_service.py
-│   ├── recommendation_service.py
-│   ├── shap_service.py
-│   └── spotify_service.py
-│
-├── saved_models/
-│   └── songlytics_regression_rf.pkl
-│
-├── data_cleaning/
-│   └── data_cleaning.ipynb
-│
-├── EDA/
-│   └── EDA.ipynb
-│
-└── spotify_cleaned.csv
-```
-
-The exact project structure may vary depending on the development environment.
-
----
-
 # 🧹 Dataset Preparation
 
 The original Spotify dataset contained approximately:
