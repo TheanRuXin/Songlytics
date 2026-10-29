@@ -21,15 +21,12 @@ from reportlab.platypus import (
     TableStyle
 )
 
-
 load_dotenv()
-
 
 DATASET_PATH = os.getenv(
     "SPOTIFY_DATASET_PATH",
     "C:/Users/ruxin/Documents/ruxin/FYP/Data/spotify_cleaned.csv"
 )
-
 
 AUDIO_FEATURES = {
     "Danceability": "danceability",

@@ -365,13 +365,8 @@ def register_user(
                 "Unable to create account."
         }
 
-def authenticate_user(
-    email,
-    password
-):
-    email = clean_email(
-        email
-    )
+def authenticate_user(email,password):
+    email = clean_email(email)
 
     try:
         with db_cursor() as cursor:

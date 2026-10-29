@@ -7,33 +7,30 @@ CSV_PATH = "C:/Users/ruxin/Documents/ruxin/FYP/Data/spotify_merged_cleaned.csv"
 
 @st.cache_data
 def load_data():
-    """加载数据"""
     df = pd.read_csv(CSV_PATH)
     
-    # 确保必要的列存在
     required_cols = ['duration_ms', 'explicit', 'danceability', 'energy', 'speechiness', 
                      'acousticness', 'instrumentalness', 'liveness', 'valence', 'loudness', 
                      'tempo', 'popularity_class', 'source']
     
-    # 检查缺失的列
+    # check the missing columns
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         st.warning(f"Missing columns: {missing_cols}")
     
-    # 添加一个模拟的 popularity 分数用于可视化（基于 popularity_class）
+    # add a simulated popularity score for visualization (based on popularity_class)
     df['popularity'] = df['popularity_class'].map({0: 25, 1: 50, 2: 85})
     
     return df
 
 def get_kpi():
-    """获取关键绩效指标"""
     df = load_data()
     
     low_count = len(df[df['popularity_class'] == 0])
     medium_count = len(df[df['popularity_class'] == 1])
     high_count = len(df[df['popularity_class'] == 2])
     
-    # 计算平均音频特征
+    #calculate average danceability and energy
     avg_danceability = df['danceability'].mean()
     avg_energy = df['energy'].mean()
     
@@ -47,7 +44,7 @@ def get_kpi():
     }
 
 def get_popularity_distribution():
-    """获取流行度分类分布"""
+    """get the distribution of popularity classes"""
     df = load_data()
     
     result = df['popularity_class'].value_counts().reset_index()
@@ -62,7 +59,7 @@ def get_popularity_distribution():
     return result[['label', 'count']]
 
 def get_feature_distribution(feature):
-    """获取单个特征的分布"""
+    """get the distribution of a single feature"""
     df = load_data()
     
     if feature in df.columns:
@@ -70,7 +67,7 @@ def get_feature_distribution(feature):
     return pd.Series()
 
 def get_features_summary():
-    """获取所有特征的统计摘要"""
+    """get the summary statistics of all features"""
     df = load_data()
     
     features = ['danceability', 'energy', 'speechiness', 'acousticness', 
@@ -90,7 +87,7 @@ def get_features_summary():
     return summary
 
 def get_feature_by_popularity(feature):
-    """按流行度分类查看特征分布"""
+    """based on the popularity class, get the mean and median of a specific feature"""
     df = load_data()
     
     if feature not in df.columns:
@@ -106,14 +103,12 @@ def get_feature_by_popularity(feature):
     return result
 
 def get_correlation_matrix():
-    """获取特征相关性矩阵"""
+    """get the correlation matrix of numerical features"""
     df = load_data()
     
-    # 选择数值特征
     features = ['danceability', 'energy', 'speechiness', 'acousticness', 
                 'instrumentalness', 'liveness', 'valence', 'loudness', 'tempo']
     
-    # 只保留存在的特征
     available_features = [f for f in features if f in df.columns]
     
     if len(available_features) >= 2:
@@ -123,7 +118,7 @@ def get_correlation_matrix():
     return pd.DataFrame()
 
 def get_feature_importance_from_model():
-    """从训练好的模型获取特征重要性"""
+    """get the feature importance from the trained model"""
     try:
         import joblib
         model_data = joblib.load("models/music_model_mp3.pkl")
@@ -137,7 +132,6 @@ def get_feature_importance_from_model():
         
         return importance
     except Exception as e:
-        # 如果模型加载失败，返回模拟数据
         features = ['instrumentalness', 'explicit', 'energy', 'acousticness', 'loudness', 
                    'danceability', 'duration_ms', 'speechiness', 'valence', 'liveness', 'tempo']
         importance = pd.DataFrame({
@@ -147,7 +141,7 @@ def get_feature_importance_from_model():
         return importance
 
 def get_source_distribution():
-    """获取数据来源分布"""
+    """get the distribution of data sources"""
     df = load_data()
     
     if 'source' in df.columns:
@@ -158,7 +152,7 @@ def get_source_distribution():
     return pd.DataFrame()
 
 def get_tempo_distribution():
-    """获取节奏分类分布"""
+    """get the distribution of tempo categories"""
     df = load_data()
     
     if 'tempo' in df.columns:
@@ -175,7 +169,7 @@ def get_tempo_distribution():
     return pd.DataFrame()
 
 def get_explicit_distribution():
-    """获取 Explicit 标签分布"""
+    """get the distribution of explicit labels"""
     df = load_data()
     
     if 'explicit' in df.columns:
@@ -187,18 +181,17 @@ def get_explicit_distribution():
     return pd.DataFrame()
 
 def get_top_songs_by_popularity(limit=10):
-    """获取热门歌曲列表（按流行度排序）"""
+    """get the list of popular songs (sorted by popularity)"""
     df = load_data()
     
     if 'song' not in df.columns or 'artist' not in df.columns:
-        # 如果没有歌名信息，返回空数据
+        # If no song name information is available, return empty data
         return pd.DataFrame()
     
-    # 按 popularity_class 排序，High 优先
+    # Sort by popularity_class, with High priority
     top_songs = df[df['song'] != 'Unknown'].copy()
     top_songs = top_songs.sort_values('popularity_class', ascending=False)
     
-    # 去重（避免同一首歌出现多次）
     top_songs = top_songs.drop_duplicates(subset=['song', 'artist'])
     
     result = top_songs.head(limit)[['song', 'artist', 'popularity_class']].copy()
@@ -209,7 +202,7 @@ def get_top_songs_by_popularity(limit=10):
     return result
 
 def search_songs(keyword):
-    """搜索歌曲（按歌名或艺术家）"""
+    """search song by artist name and song name"""
     df = load_data()
     
     if 'song' not in df.columns or 'artist' not in df.columns:
@@ -217,13 +210,13 @@ def search_songs(keyword):
     
     keyword_lower = keyword.lower()
     
-    # 搜索匹配的歌曲
+    # Search for matching songs
     matched = df[
         df['song'].str.lower().str.contains(keyword_lower, na=False) |
         df['artist'].str.lower().str.contains(keyword_lower, na=False)
     ].copy()
     
-    # 去重
+    # Remove duplicates
     matched = matched.drop_duplicates(subset=['song', 'artist'])
     
     result = matched[['song', 'artist', 'popularity_class']].head(20)
@@ -234,13 +227,13 @@ def search_songs(keyword):
     return result
 
 def get_song_features(song_name, artist_name):
-    """获取指定歌曲的特征"""
+    """get the features of a specified song"""
     df = load_data()
     
     if 'song' not in df.columns or 'artist' not in df.columns:
         return None
     
-    # 查找歌曲
+    # Search for the song
     song_data = df[
         (df['song'].str.lower() == song_name.lower()) &
         (df['artist'].str.lower() == artist_name.lower())
@@ -252,13 +245,13 @@ def get_song_features(song_name, artist_name):
     return song_data.iloc[0]
 
 def get_popularity_by_song_count(limit=20):
-    """获取每个艺术家的热门歌曲数量"""
+    """get the number of popular songs for each artist"""
     df = load_data()
     
     if 'artist' not in df.columns:
         return pd.DataFrame()
     
-    # 统计每个艺术家的 High 流行度歌曲数量
+    # Count the number of High popularity songs for each artist
     high_songs = df[df['popularity_class'] == 2]
     artist_count = high_songs['artist'].value_counts().reset_index()
     artist_count.columns = ['artist', 'high_popularity_count']
@@ -266,7 +259,7 @@ def get_popularity_by_song_count(limit=20):
     return artist_count.head(limit)
 
 def get_song_examples_by_class():
-    """获取每个流行度类别的示例歌曲"""
+    """get the example songs for each popularity class"""
     df = load_data()
     
     if 'song' not in df.columns:

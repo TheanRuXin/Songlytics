@@ -29,7 +29,6 @@ from services.history_service import (
     delete_simulation
 )
 
-
 def format_datetime(value):
     if not value:
         return "N/A"
@@ -733,7 +732,8 @@ def create_simulation_pdf(
 
 
 def show_prediction_detail(
-    record
+    record,
+    user_id
 ):
     st.markdown(
         "### Prediction Details"
@@ -878,19 +878,27 @@ def show_prediction_detail(
             use_container_width=True
         ):
             try:
-                delete_prediction(
+                deleted = delete_prediction(
+                    user_id,
                     record["id"]
                 )
 
-                st.session_state[
-                    "selected_prediction_history"
-                ] = None
+                if deleted:
+                    print("Deleted prediction record:", record["id"])
+                    st.session_state[
+                        "selected_prediction_history"
+                    ] = None
 
-                st.success(
-                    "Prediction record deleted."
-                )
+                    st.success(
+                        "Prediction record deleted."
+                    )
 
-                st.rerun()
+                    st.rerun()
+
+                else:
+                    st.error(
+                        "Unable to delete prediction record."
+                    )
 
             except Exception as e:
                 st.error(
@@ -899,7 +907,8 @@ def show_prediction_detail(
 
 
 def show_simulation_detail(
-    record
+    record,
+    user_id
 ):
     st.markdown(
         "### Simulation Details"
@@ -1077,19 +1086,27 @@ def show_simulation_detail(
             use_container_width=True
         ):
             try:
-                delete_simulation(
+                deleted = delete_simulation(
+                    user_id,
                     record["id"]
                 )
 
-                st.session_state[
-                    "selected_simulation_history"
-                ] = None
+                if deleted:
+                    print("Deleted simulation record:", record["id"])
+                    st.session_state[
+                        "selected_simulation_history"
+                    ] = None
 
-                st.success(
-                    "Simulation record deleted."
-                )
+                    st.success(
+                        "Simulation record deleted."
+                    )
 
-                st.rerun()
+                    st.rerun()
+
+                else:
+                    st.error(
+                        "Unable to delete simulation record."
+                    )
 
             except Exception as e:
                 st.error(
@@ -1226,7 +1243,8 @@ def show_prediction_history(
                 st.divider()
 
                 show_prediction_detail(
-                    record
+                    record,
+                    user_id
                 )
 
 def show_simulation_history(
@@ -1367,7 +1385,8 @@ def show_simulation_history(
                 st.divider()
 
                 show_simulation_detail(
-                    record
+                    record,
+                    user_id
                 )
 
 def show_history():
