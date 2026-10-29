@@ -737,7 +737,7 @@ Back to Prediction Result
 Predict Another Song
 ```
 
-```
+---
 
 The system should treat this input as normal data rather than executable SQL because parameterized SQL queries are used.
 
